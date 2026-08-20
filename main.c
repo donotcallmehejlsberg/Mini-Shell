@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,30 +6,42 @@
 #define BUFFER_SIZE 256
 #define MAX_ARGUMENTS 32
 
-int main(void) {
-  const char delimiters[] = " \t\n";
-  char *token;
-  char *buffer = NULL;
-  buffer = calloc(BUFFER_SIZE, sizeof(char));
+void printPrompt(void) {
+  printf("my shell > ");
+  fflush(stdout);
+}
+
+char *allocateBuffer(void) {
+  char *buffer = calloc(BUFFER_SIZE, sizeof(char));
   if (buffer == NULL) {
     fprintf(stderr, "Memory allocation failed\n");
-    return EXIT_FAILURE;
+    return NULL;
+  }
+  return buffer;
+}
+
+bool readLine(char *buffer) {
+  if (fgets(buffer, BUFFER_SIZE, stdin) == NULL) {
+    return false;
   }
 
+  if (strcmp(buffer, "quit\n") == 0) {
+    return false;
+  }
+
+  return true;
+}
+
+void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
+  const char delimiters[] = " \t\n";
+  char *token;
+
   while (1) {
-    printf("my shell > ");
-    fflush(stdout);
-    if (fgets(buffer, BUFFER_SIZE, stdin) == NULL) {
+    printPrompt();
+    bool command = readLine(buffer);
+    if (command == false) {
       break;
-    }
-
-    if (strcmp(buffer, "quit\n") == 0) {
-      break;
-    }
-
-    if (strcmp(buffer, "\n") == 0) {
-      continue;
     }
 
     int argument_count = 0;
@@ -56,9 +69,16 @@ int main(void) {
 
     printf("command_argv[%d] = NULL\n", argument_count);
   }
+}
+
+int main(void) {
+  char *buffer = allocateBuffer();
+  if (buffer == NULL) {
+    return EXIT_FAILURE;
+  }
+  runShell(buffer);
 
   free(buffer);
   buffer = NULL;
-
   return EXIT_SUCCESS;
 }
