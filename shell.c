@@ -29,6 +29,24 @@ static bool readLine(char *buffer) {
 }
 
 static int executeCommand(char **command_argv) {
+  if (strcmp(command_argv[0], "cd") == 0) {
+    if (command_argv[1] == NULL) {
+      fprintf(stderr, "cd: missing directory\n");
+      return EXIT_FAILURE;
+    }
+
+    if (chdir(command_argv[1]) != 0) {
+      perror("cd");
+      return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+  }
+
+  if (strcmp(command_argv[0], "exit") == 0) {
+    return EXIT_SUCCESS;
+  }
+
   pid_t pid = fork();
   if (pid < 0) {
     perror("fork failed");
