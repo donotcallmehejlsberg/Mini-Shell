@@ -8,6 +8,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 add_executable(minishell
   main.c
+  shell.c
 )
 
 if(MSVC)
