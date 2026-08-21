@@ -43,10 +43,6 @@ static int executeCommand(char **command_argv) {
     return EXIT_SUCCESS;
   }
 
-  if (strcmp(command_argv[0], "exit") == 0) {
-    return EXIT_SUCCESS;
-  }
-
   pid_t pid = fork();
   if (pid < 0) {
     perror("fork failed");
@@ -117,6 +113,10 @@ void runShell(char *buffer) {
       continue;
     }
     command_argv[argument_count] = NULL;
+
+    if (strcmp(command_argv[0], "exit") == 0) {
+      break;
+    }
 
     int command_status = executeCommand(command_argv);
     printf("Command status: %d\n", command_status);
