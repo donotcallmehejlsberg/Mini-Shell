@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define BUFFER_SIZE 256
 #define MAX_ARGUMENTS 32
@@ -61,8 +64,34 @@ void runShell(char *buffer) {
       fprintf(stderr, "Too many arguments\n");
       continue;
     }
-
     command_argv[argument_count] = NULL;
+
+    pid_t pid = fork();
+
+    if (pid < 0) {
+      perror("fork failed");
+      continue;
+    } else if (pid == 0) {
+      execvp(command_argv[0], command_argv);
+      perror("execvp failed");
+      _exit(EXIT_FAILURE);
+    } else {
+      int status;
+      pid_t wait_result = waitpid(pid, &status, 0);
+
+      if (wait_result == -1) {
+        perror("waitpid failed");
+        
+      } else if (WIFEXITED(status)) {
+        int exit_code = WEXITSTATUS(status);
+        printf("Child exited with status %d\n", exit_code);
+
+      } else if (WIFSIGNALED(status)) {
+        int signal_number = WTERMSIG(status);
+        printf("Child terminated by signal %d\n", signal_number);
+      }
+    }
+
     for (int i = 0; i < argument_count; i++) {
       printf("command_argv[%d] = \"%s\"\n", i, command_argv[i]);
     }
