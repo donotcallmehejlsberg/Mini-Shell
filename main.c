@@ -35,6 +35,38 @@ bool readLine(char *buffer) {
   return true;
 }
 
+int executeCommand(char **command_argv) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    perror("fork failed");
+    return EXIT_FAILURE;
+  }
+
+  if (pid == 0) {
+    execvp(command_argv[0], command_argv);
+    perror("execvp failed");
+    _exit(EXIT_FAILURE);
+  }
+
+  int status;
+  pid_t wait_result = waitpid(pid, &status, 0);
+  if (wait_result == -1) {
+    perror("waitpid failed");
+    return EXIT_FAILURE;
+  }
+
+  if (WIFEXITED(status)) {
+    return WEXITSTATUS(status);
+  }
+
+  if (WIFSIGNALED(status)) {
+    // Shells represent signal termination as 128 plus the signal number.
+    return 128 + WTERMSIG(status);
+  }
+
+  return EXIT_FAILURE;
+}
+
 void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
   const char delimiters[] = " \t\n";
@@ -66,37 +98,8 @@ void runShell(char *buffer) {
     }
     command_argv[argument_count] = NULL;
 
-    pid_t pid = fork();
-
-    if (pid < 0) {
-      perror("fork failed");
-      continue;
-    } else if (pid == 0) {
-      execvp(command_argv[0], command_argv);
-      perror("execvp failed");
-      _exit(EXIT_FAILURE);
-    } else {
-      int status;
-      pid_t wait_result = waitpid(pid, &status, 0);
-
-      if (wait_result == -1) {
-        perror("waitpid failed");
-        
-      } else if (WIFEXITED(status)) {
-        int exit_code = WEXITSTATUS(status);
-        printf("Child exited with status %d\n", exit_code);
-
-      } else if (WIFSIGNALED(status)) {
-        int signal_number = WTERMSIG(status);
-        printf("Child terminated by signal %d\n", signal_number);
-      }
-    }
-
-    for (int i = 0; i < argument_count; i++) {
-      printf("command_argv[%d] = \"%s\"\n", i, command_argv[i]);
-    }
-
-    printf("command_argv[%d] = NULL\n", argument_count);
+    int command_status = executeCommand(command_argv);
+    printf("Command status: %d\n", command_status);
   }
 }
 
