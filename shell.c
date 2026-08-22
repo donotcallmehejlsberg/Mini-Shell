@@ -62,7 +62,7 @@ static int executeCommand(char **command_argv) {
 
   int redirection_index = findRedirectionIndex(command_argv);
   if (redirection_index != -1 && command_argv[redirection_index + 1] == NULL) {
-    fprintf(stderr, "missing output file\n");
+    fprintf(stderr, "missing redirection file\n");
     return EXIT_FAILURE;
   }
 
@@ -92,10 +92,8 @@ static int executeCommand(char **command_argv) {
       close(fd);
 
       command_argv[redirection_index] = NULL;
-    }
-
-    if (redirection_index != -1 &&
-        strcmp(command_argv[redirection_index], "<") == 0) {
+    } else if (redirection_index != -1 &&
+               strcmp(command_argv[redirection_index], "<") == 0) {
       char *filename = command_argv[redirection_index + 1];
 
       int fd = open(filename, O_RDONLY);
@@ -105,6 +103,25 @@ static int executeCommand(char **command_argv) {
       }
 
       if (dup2(fd, STDIN_FILENO) == -1) {
+        perror("dup2");
+        close(fd);
+        _exit(EXIT_FAILURE);
+      }
+
+      close(fd);
+
+      command_argv[redirection_index] = NULL;
+    } else if (redirection_index != -1 &&
+               strcmp(command_argv[redirection_index], ">>") == 0) {
+      char *filename = command_argv[redirection_index + 1];
+
+      int fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
+      if (fd == -1) {
+        perror("open");
+        _exit(EXIT_FAILURE);
+      }
+
+      if (dup2(fd, STDOUT_FILENO) == -1) {
         perror("dup2");
         close(fd);
         _exit(EXIT_FAILURE);
