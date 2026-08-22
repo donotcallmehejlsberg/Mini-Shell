@@ -1,9 +1,11 @@
 #include "shell.h"
 
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -50,6 +52,28 @@ static int executeCommand(char **command_argv) {
   }
 
   if (pid == 0) {
+    if (command_argv[1] != NULL && strcmp(command_argv[1], ">") == 0) {
+      if (command_argv[2] == NULL) {
+        fprintf(stderr, "missing output file\n");
+        _exit(EXIT_FAILURE);
+      }
+
+      int fd = open(command_argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd == -1) {
+        perror("open");
+        _exit(EXIT_FAILURE);
+      }
+
+      if (dup2(fd, STDOUT_FILENO) == -1) {
+        perror("dup2");
+        close(fd);
+        _exit(EXIT_FAILURE);
+      }
+
+      close(fd);
+      command_argv[1] = NULL;
+    }
+
     execvp(command_argv[0], command_argv);
     perror("execvp failed");
     _exit(EXIT_FAILURE);
