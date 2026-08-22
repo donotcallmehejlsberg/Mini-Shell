@@ -35,6 +35,12 @@ static int findRedirectionIndex(char **command_argv) {
     if (strcmp(command_argv[i], ">") == 0) {
       return i;
     }
+    if (strcmp(command_argv[i], "<") == 0) {
+      return i;
+    }
+    if (strcmp(command_argv[i], ">>") == 0) {
+      return i;
+    }
   }
   return -1;
 }
@@ -78,6 +84,27 @@ static int executeCommand(char **command_argv) {
       }
 
       if (dup2(fd, STDOUT_FILENO) == -1) {
+        perror("dup2");
+        close(fd);
+        _exit(EXIT_FAILURE);
+      }
+
+      close(fd);
+
+      command_argv[redirection_index] = NULL;
+    }
+
+    if (redirection_index != -1 &&
+        strcmp(command_argv[redirection_index], "<") == 0) {
+      char *filename = command_argv[redirection_index + 1];
+
+      int fd = open(filename, O_RDONLY);
+      if (fd == -1) {
+        perror("open");
+        _exit(EXIT_FAILURE);
+      }
+
+      if (dup2(fd, STDIN_FILENO) == -1) {
         perror("dup2");
         close(fd);
         _exit(EXIT_FAILURE);
