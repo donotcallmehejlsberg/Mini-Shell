@@ -45,99 +45,70 @@ static int findRedirectionIndex(char **command_argv) {
   return -1;
 }
 
-static int executeCommand(char **command_argv) {
-  if (strcmp(command_argv[0], "cd") == 0) {
-    if (command_argv[1] == NULL) {
-      fprintf(stderr, "cd: missing directory\n");
-      return EXIT_FAILURE;
-    }
+static int changeDirectory(char **command_argv) {
+  if (command_argv[1] == NULL) {
+    fprintf(stderr, "cd: missing directory\n");
+    return EXIT_FAILURE;
+  }
 
-    if (chdir(command_argv[1]) != 0) {
-      perror("cd");
-      return EXIT_FAILURE;
-    }
+  if (chdir(command_argv[1]) != 0) {
+    perror("cd");
+    return EXIT_FAILURE;
+  }
 
+  return EXIT_SUCCESS;
+}
+
+static int setupRedirection(char **command_argv, int redirection_index) {
+  if (redirection_index == -1) {
     return EXIT_SUCCESS;
   }
 
-  int redirection_index = findRedirectionIndex(command_argv);
-  if (redirection_index != -1 && command_argv[redirection_index + 1] == NULL) {
+  if (command_argv[redirection_index + 1] == NULL) {
     fprintf(stderr, "missing redirection file\n");
     return EXIT_FAILURE;
   }
 
-  pid_t pid = fork();
-  if (pid < 0) {
-    perror("fork failed");
+  const char *redirection_operator = command_argv[redirection_index];
+  const char *filename = command_argv[redirection_index + 1];
+
+  int fd;
+  int target_fd;
+
+  if (strcmp(redirection_operator, ">") == 0) {
+    fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    target_fd = STDOUT_FILENO;
+  } else if (strcmp(redirection_operator, "<") == 0) {
+    fd = open(filename, O_RDONLY);
+    target_fd = STDIN_FILENO;
+  } else if (strcmp(redirection_operator, ">>") == 0) {
+    fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    target_fd = STDOUT_FILENO;
+  } else {
+    fprintf(stderr, "unsupported redirection operator\n");
     return EXIT_FAILURE;
   }
 
-  if (pid == 0) {
-    if (redirection_index != -1 &&
-        strcmp(command_argv[redirection_index], ">") == 0) {
-      char *filename = command_argv[redirection_index + 1];
-
-      int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd == -1) {
-        perror("open");
-        _exit(EXIT_FAILURE);
-      }
-
-      if (dup2(fd, STDOUT_FILENO) == -1) {
-        perror("dup2");
-        close(fd);
-        _exit(EXIT_FAILURE);
-      }
-
-      close(fd);
-
-      command_argv[redirection_index] = NULL;
-    } else if (redirection_index != -1 &&
-               strcmp(command_argv[redirection_index], "<") == 0) {
-      char *filename = command_argv[redirection_index + 1];
-
-      int fd = open(filename, O_RDONLY);
-      if (fd == -1) {
-        perror("open");
-        _exit(EXIT_FAILURE);
-      }
-
-      if (dup2(fd, STDIN_FILENO) == -1) {
-        perror("dup2");
-        close(fd);
-        _exit(EXIT_FAILURE);
-      }
-
-      close(fd);
-
-      command_argv[redirection_index] = NULL;
-    } else if (redirection_index != -1 &&
-               strcmp(command_argv[redirection_index], ">>") == 0) {
-      char *filename = command_argv[redirection_index + 1];
-
-      int fd = open(filename, O_WRONLY | O_CREAT | O_APPEND, 0644);
-      if (fd == -1) {
-        perror("open");
-        _exit(EXIT_FAILURE);
-      }
-
-      if (dup2(fd, STDOUT_FILENO) == -1) {
-        perror("dup2");
-        close(fd);
-        _exit(EXIT_FAILURE);
-      }
-
-      close(fd);
-
-      command_argv[redirection_index] = NULL;
-    }
-
-    execvp(command_argv[0], command_argv);
-    perror("execvp failed");
-    _exit(EXIT_FAILURE);
+  if (fd == -1) {
+    perror("open");
+    return EXIT_FAILURE;
   }
 
+  if (dup2(fd, target_fd) == -1) {
+    perror("dup2");
+    close(fd);
+    return EXIT_FAILURE;
+  }
+
+  close(fd);
+  command_argv[redirection_index] = NULL;
+
+  return EXIT_SUCCESS;
+}
+
+static int waitForChild(pid_t pid) {
   int status;
+
   pid_t wait_result = waitpid(pid, &status, 0);
   if (wait_result == -1) {
     perror("waitpid failed");
@@ -149,11 +120,41 @@ static int executeCommand(char **command_argv) {
   }
 
   if (WIFSIGNALED(status)) {
-    // Shells represent signal termination as 128 plus the signal number.
     return 128 + WTERMSIG(status);
   }
 
   return EXIT_FAILURE;
+}
+
+static void executeChild(char **command_argv, int redirection_index) {
+  if (setupRedirection(command_argv, redirection_index) != EXIT_SUCCESS) {
+    _exit(EXIT_FAILURE);
+  }
+
+  execvp(command_argv[0], command_argv);
+
+  perror("execvp failed");
+  _exit(EXIT_FAILURE);
+}
+
+static int executeCommand(char **command_argv) {
+  if (strcmp(command_argv[0], "cd") == 0) {
+    return changeDirectory(command_argv);
+  }
+
+  int redirection_index = findRedirectionIndex(command_argv);
+
+  pid_t pid = fork();
+  if (pid < 0) {
+    perror("fork failed");
+    return EXIT_FAILURE;
+  }
+
+  if (pid == 0) {
+    executeChild(command_argv, redirection_index);
+  }
+
+  return waitForChild(pid);
 }
 
 char *allocateBuffer(void) {
