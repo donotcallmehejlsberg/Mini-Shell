@@ -30,6 +30,15 @@ static bool readLine(char *buffer) {
   return true;
 }
 
+static int findRedirectionIndex(char **command_argv) {
+  for (int i = 1; command_argv[i] != NULL; i++) {
+    if (strcmp(command_argv[i], ">") == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 static int executeCommand(char **command_argv) {
   if (strcmp(command_argv[0], "cd") == 0) {
     if (command_argv[1] == NULL) {
@@ -45,6 +54,12 @@ static int executeCommand(char **command_argv) {
     return EXIT_SUCCESS;
   }
 
+  int redirection_index = findRedirectionIndex(command_argv);
+  if (redirection_index != -1 && command_argv[redirection_index + 1] == NULL) {
+    fprintf(stderr, "missing output file\n");
+    return EXIT_FAILURE;
+  }
+
   pid_t pid = fork();
   if (pid < 0) {
     perror("fork failed");
@@ -52,13 +67,11 @@ static int executeCommand(char **command_argv) {
   }
 
   if (pid == 0) {
-    if (command_argv[1] != NULL && strcmp(command_argv[1], ">") == 0) {
-      if (command_argv[2] == NULL) {
-        fprintf(stderr, "missing output file\n");
-        _exit(EXIT_FAILURE);
-      }
+    if (redirection_index != -1 &&
+        strcmp(command_argv[redirection_index], ">") == 0) {
+      char *filename = command_argv[redirection_index + 1];
 
-      int fd = open(command_argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd == -1) {
         perror("open");
         _exit(EXIT_FAILURE);
@@ -71,7 +84,8 @@ static int executeCommand(char **command_argv) {
       }
 
       close(fd);
-      command_argv[1] = NULL;
+
+      command_argv[redirection_index] = NULL;
     }
 
     execvp(command_argv[0], command_argv);
