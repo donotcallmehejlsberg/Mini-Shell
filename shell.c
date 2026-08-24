@@ -166,10 +166,35 @@ char *allocateBuffer(void) {
   return buffer;
 }
 
+static int tokenizeCommand(char *buffer, char **command_argv) {
+  int argument_count = 0;
+  const char delimiters[] = " \t\n";
+
+  char *token;
+  token = strtok(buffer, delimiters);
+  if (token == NULL) {
+    command_argv[0] = NULL;
+    return 0;
+  }
+
+  while (token != NULL && argument_count < MAX_ARGUMENTS) {
+    command_argv[argument_count] = token;
+    argument_count++;
+
+    token = strtok(NULL, delimiters);
+  }
+
+  if (token != NULL) {
+    fprintf(stderr, "Too many arguments\n");
+    return -1;
+  }
+
+  command_argv[argument_count] = NULL;
+  return argument_count;
+}
+
 void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
-  const char delimiters[] = " \t\n";
-  char *token;
 
   while (1) {
     printPrompt();
@@ -178,24 +203,14 @@ void runShell(char *buffer) {
       break;
     }
 
-    int argument_count = 0;
-    token = strtok(buffer, delimiters);
-    if (token == NULL) {
+    int argument_count = tokenizeCommand(buffer, command_argv);
+    if (argument_count < 0) {
       continue;
     }
 
-    while (token != NULL && argument_count < MAX_ARGUMENTS) {
-      command_argv[argument_count] = token;
-      argument_count++;
-
-      token = strtok(NULL, delimiters);
-    }
-
-    if (token != NULL) {
-      fprintf(stderr, "Too many arguments\n");
+    if (argument_count == 0) {
       continue;
     }
-    command_argv[argument_count] = NULL;
 
     if (strcmp(command_argv[0], "exit") == 0) {
       break;
