@@ -45,6 +45,15 @@ static int findRedirectionIndex(char **command_argv) {
   return -1;
 }
 
+static int findPipeIndex(char **command_argv) {
+  for (int i = 1; command_argv[i] != NULL; i++) {
+    if (strcmp(command_argv[i], "|") == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 static int changeDirectory(char **command_argv) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "cd: missing directory\n");
@@ -143,6 +152,27 @@ static int executeCommand(char **command_argv) {
   }
 
   int redirection_index = findRedirectionIndex(command_argv);
+  int pipe_index = findPipeIndex(command_argv);
+  if (pipe_index != -1) {
+    if (command_argv[pipe_index + 1] == NULL) {
+      fprintf(stderr, "missing command after pipe\n");
+      return EXIT_FAILURE;
+    }
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+      perror("pipe");
+      return EXIT_FAILURE;
+    }
+
+    printf("read end: %d\n", pipefd[0]);
+    printf("write end: %d\n", pipefd[1]);
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    return EXIT_SUCCESS;
+  }
 
   pid_t pid = fork();
   if (pid < 0) {
