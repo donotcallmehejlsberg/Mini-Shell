@@ -165,13 +165,60 @@ static int executeCommand(char **command_argv) {
       return EXIT_FAILURE;
     }
 
-    printf("read end: %d\n", pipefd[0]);
-    printf("write end: %d\n", pipefd[1]);
+    char **left_command = command_argv;
+    char **right_command = &command_argv[pipe_index + 1];
+    command_argv[pipe_index] = NULL;
+
+    pid_t left_pid = fork();
+    if (left_pid < 0) {
+      perror("fork failed");
+      close(pipefd[0]);
+      close(pipefd[1]);
+      return EXIT_FAILURE;
+    }
+
+    if (left_pid == 0) {
+      if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+        perror("dup2");
+        close(pipefd[1]);
+        close(pipefd[0]);
+        _exit(EXIT_FAILURE);
+      }
+      close(pipefd[1]);
+      close(pipefd[0]);
+      execvp(left_command[0], left_command);
+      perror("execvp failed");
+      _exit(EXIT_FAILURE);
+    }
+
+    pid_t right_pid = fork();
+    if (right_pid < 0) {
+      perror("fork failed");
+      close(pipefd[0]);
+      close(pipefd[1]);
+      waitForChild(left_pid);
+      return EXIT_FAILURE;
+    }
+
+    if (right_pid == 0) {
+      if (dup2(pipefd[0], STDIN_FILENO) == -1) {
+        perror("dup2");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        _exit(EXIT_FAILURE);
+      }
+      close(pipefd[0]);
+      close(pipefd[1]);
+      execvp(right_command[0], right_command);
+      perror("execvp failed");
+      _exit(EXIT_FAILURE);
+    }
 
     close(pipefd[0]);
     close(pipefd[1]);
 
-    return EXIT_SUCCESS;
+    waitForChild(left_pid);
+    return waitForChild(right_pid);
   }
 
   pid_t pid = fork();
