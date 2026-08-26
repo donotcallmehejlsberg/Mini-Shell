@@ -13,7 +13,11 @@ connects commands using Unix pipes and file descriptor redirection.
 - Redirect output with `>`
 - Append output with `>>`
 - Connect multiple commands with pipelines
+- Run individual external commands in the background with `&`
+- Keep the shell alive when `Ctrl+C` interrupts a foreground command
+- Detect foreground processes stopped with `Ctrl+Z`
 - Wait for child processes and report command exit status
+- Reap completed background processes without blocking the shell
 
 ## Build
 
@@ -36,7 +40,11 @@ cd /tmp
 echo hello > output.txt
 cat < output.txt
 cat file.txt | grep hello | sort
+sleep 5 &
+sleep 20
 ```
 
 Commands are currently parsed as whitespace-separated tokens. Quoting,
-escaping, background execution, and job control are not supported.
+escaping, and job control commands such as `jobs`, `fg`, and `bg` are not
+supported. Process groups, terminal foreground control, and immediate
+`SIGCHLD`-driven background-process cleanup are not implemented yet.
