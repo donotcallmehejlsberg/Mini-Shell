@@ -35,6 +35,21 @@ static int setupSignalHandlers(void) {
   return EXIT_SUCCESS;
 }
 
+static int restoreChildSignalHandlers(void) {
+  struct sigaction action = {0};
+
+  action.sa_handler = SIG_DFL;
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = 0;
+
+  if (sigaction(SIGINT, &action, NULL) == -1) {
+    perror("sigaction");
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
 static void printPrompt(void) {
   printf("my shell > ");
   fflush(stdout);
@@ -276,6 +291,9 @@ static int executeCommand(char **command_argv, bool is_background) {
   }
 
   if (pid == 0) {
+    if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
+      _exit(EXIT_FAILURE);
+    }
     executeChild(command_argv, redirection_index);
   }
 
@@ -357,6 +375,6 @@ void runShell(char *buffer) {
     }
 
     int command_status = executeCommand(command_argv, is_background);
-    printf("Command status: %d\n", command_status);
+    printf("\nCommand status: %d\n", command_status);
   }
 }
