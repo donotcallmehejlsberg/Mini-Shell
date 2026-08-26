@@ -32,6 +32,12 @@ static int setupSignalHandlers(void) {
     return EXIT_FAILURE;
   }
 
+  action.sa_handler = SIG_IGN;
+  if (sigaction(SIGTSTP, &action, NULL) == -1) {
+    perror("sigaction");
+    return EXIT_FAILURE;
+  }
+
   return EXIT_SUCCESS;
 }
 
@@ -43,6 +49,11 @@ static int restoreChildSignalHandlers(void) {
   action.sa_flags = 0;
 
   if (sigaction(SIGINT, &action, NULL) == -1) {
+    perror("sigaction");
+    return EXIT_FAILURE;
+  }
+
+  if (sigaction(SIGTSTP, &action, NULL) == -1) {
     perror("sigaction");
     return EXIT_FAILURE;
   }
@@ -173,11 +184,16 @@ static void reapBackgroundChildren(void) {
 
 static int waitForChild(pid_t pid) {
   int status;
-
   pid_t wait_result;
+
   do {
-    wait_result = waitpid(pid, &status, 0);
+    wait_result = waitpid(pid, &status, WUNTRACED);
   } while (wait_result == -1 && errno == EINTR);
+
+  if (wait_result == -1) {
+    perror("waitpid failed");
+    return EXIT_FAILURE;
+  }
 
   if (WIFEXITED(status)) {
     return WEXITSTATUS(status);
@@ -185,6 +201,12 @@ static int waitForChild(pid_t pid) {
 
   if (WIFSIGNALED(status)) {
     return 128 + WTERMSIG(status);
+  }
+
+  if (WIFSTOPPED(status)) {
+    int signal_number = WSTOPSIG(status);
+    printf("\n[stopped] PID %d by signal %d\n", (int)pid, signal_number);
+    return 128 + signal_number;
   }
 
   return EXIT_FAILURE;
@@ -230,6 +252,9 @@ static int executePipeline(char **command_argv, int pipe_count) {
     }
 
     if (pids[i] == 0) {
+      if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
+        _exit(EXIT_FAILURE);
+      }
       if (i > 0) {
         dup2(pipefds[i - 1][0], STDIN_FILENO);
       }
