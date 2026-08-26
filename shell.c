@@ -116,7 +116,16 @@ static int setupRedirection(char **command_argv, int redirection_index) {
 
 static void reapBackgroundChildren(void) {
   int status;
-  while (waitpid(-1, &status, WNOHANG) > 0) {
+  pid_t finished_pid;
+
+  while ((finished_pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    if (WIFEXITED(status)) {
+      printf("[background] PID %d finished with status %d\n", (int)finished_pid,
+             WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+      printf("[background] PID %d terminated by signal %d\n", (int)finished_pid,
+             WTERMSIG(status));
+    }
   }
 }
 
@@ -245,6 +254,7 @@ static int executeCommand(char **command_argv, bool is_background) {
   }
 
   if (is_background) {
+    printf("[background] PID %d\n", (int)pid);
     return EXIT_SUCCESS;
   }
   return waitForChild(pid);
