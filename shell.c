@@ -12,6 +12,7 @@
 
 #define BUFFER_SIZE 256
 #define MAX_ARGUMENTS 32
+#define PIPE_END_COUNT 2
 
 static void printPrompt(void) {
   printf("my shell > ");
@@ -39,15 +40,6 @@ static int findRedirectionIndex(char **command_argv) {
       return i;
     }
     if (strcmp(command_argv[i], ">>") == 0) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-static int findPipeIndex(char **command_argv) {
-  for (int i = 1; command_argv[i] != NULL; i++) {
-    if (strcmp(command_argv[i], "|") == 0) {
       return i;
     }
   }
@@ -135,6 +127,77 @@ static int waitForChild(pid_t pid) {
   return EXIT_FAILURE;
 }
 
+static int countPipes(char **command_argv) {
+  int count = 0;
+  for (int i = 1; command_argv[i] != NULL; i++) {
+    if (strcmp(command_argv[i], "|") == 0) {
+      count++;
+    }
+  }
+  return count;
+}
+
+static int executePipeline(char **command_argv, int pipe_count) {
+  int pipefds[pipe_count][PIPE_END_COUNT];
+  for (int i = 0; i < pipe_count; i++) {
+    if (pipe(pipefds[i]) == -1) {
+      perror("pipe");
+      return EXIT_FAILURE;
+    }
+  }
+
+  char **commands[MAX_ARGUMENTS];
+  int command_count = 1;
+  commands[0] = command_argv;
+
+  for (int i = 1; command_argv[i] != NULL; i++) {
+    if (strcmp(command_argv[i], "|") == 0) {
+      command_argv[i] = NULL;
+      commands[command_count] = &command_argv[i + 1];
+      command_count++;
+    }
+  }
+
+  pid_t pids[command_count];
+  for (int i = 0; i < command_count; i++) {
+    pids[i] = fork();
+    if (pids[i] < 0) {
+      perror("fork failed");
+      return EXIT_FAILURE;
+    }
+
+    if (pids[i] == 0) {
+      if (i > 0) {
+        dup2(pipefds[i - 1][0], STDIN_FILENO);
+      }
+
+      if (i < command_count - 1) {
+        dup2(pipefds[i][1], STDOUT_FILENO);
+      }
+
+      for (int j = 0; j < pipe_count; j++) {
+        close(pipefds[j][0]);
+        close(pipefds[j][1]);
+      }
+
+      execvp(commands[i][0], commands[i]);
+      perror("execvp failed");
+      _exit(EXIT_FAILURE);
+    }
+  }
+
+  for (int i = 0; i < pipe_count; i++) {
+    close(pipefds[i][0]);
+    close(pipefds[i][1]);
+  }
+
+  for (int i = 0; i < command_count - 1; i++) {
+    waitForChild(pids[i]);
+  }
+
+  return waitForChild(pids[command_count - 1]);
+}
+
 static void executeChild(char **command_argv, int redirection_index) {
   if (setupRedirection(command_argv, redirection_index) != EXIT_SUCCESS) {
     _exit(EXIT_FAILURE);
@@ -151,75 +214,12 @@ static int executeCommand(char **command_argv) {
     return changeDirectory(command_argv);
   }
 
-  int redirection_index = findRedirectionIndex(command_argv);
-  int pipe_index = findPipeIndex(command_argv);
-  if (pipe_index != -1) {
-    if (command_argv[pipe_index + 1] == NULL) {
-      fprintf(stderr, "missing command after pipe\n");
-      return EXIT_FAILURE;
-    }
-
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-      perror("pipe");
-      return EXIT_FAILURE;
-    }
-
-    char **left_command = command_argv;
-    char **right_command = &command_argv[pipe_index + 1];
-    command_argv[pipe_index] = NULL;
-
-    pid_t left_pid = fork();
-    if (left_pid < 0) {
-      perror("fork failed");
-      close(pipefd[0]);
-      close(pipefd[1]);
-      return EXIT_FAILURE;
-    }
-
-    if (left_pid == 0) {
-      if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
-        perror("dup2");
-        close(pipefd[1]);
-        close(pipefd[0]);
-        _exit(EXIT_FAILURE);
-      }
-      close(pipefd[1]);
-      close(pipefd[0]);
-      execvp(left_command[0], left_command);
-      perror("execvp failed");
-      _exit(EXIT_FAILURE);
-    }
-
-    pid_t right_pid = fork();
-    if (right_pid < 0) {
-      perror("fork failed");
-      close(pipefd[0]);
-      close(pipefd[1]);
-      waitForChild(left_pid);
-      return EXIT_FAILURE;
-    }
-
-    if (right_pid == 0) {
-      if (dup2(pipefd[0], STDIN_FILENO) == -1) {
-        perror("dup2");
-        close(pipefd[0]);
-        close(pipefd[1]);
-        _exit(EXIT_FAILURE);
-      }
-      close(pipefd[0]);
-      close(pipefd[1]);
-      execvp(right_command[0], right_command);
-      perror("execvp failed");
-      _exit(EXIT_FAILURE);
-    }
-
-    close(pipefd[0]);
-    close(pipefd[1]);
-
-    waitForChild(left_pid);
-    return waitForChild(right_pid);
+  int pipe_count = countPipes(command_argv);
+  if (pipe_count > 0) {
+    return executePipeline(command_argv, pipe_count);
   }
+
+  int redirection_index = findRedirectionIndex(command_argv);
 
   pid_t pid = fork();
   if (pid < 0) {
