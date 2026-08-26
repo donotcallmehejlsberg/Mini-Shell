@@ -1,6 +1,8 @@
 #include "shell.h"
 
+#include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +16,25 @@
 #define MAX_ARGUMENTS 32
 #define PIPE_END_COUNT 2
 
+static volatile sig_atomic_t received_signal = 0;
+
+static void handleSignal(int signal_number) { received_signal = signal_number; }
+
+static int setupSignalHandlers(void) {
+  struct sigaction action = {0};
+
+  action.sa_handler = handleSignal;
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = 0;
+
+  if (sigaction(SIGINT, &action, NULL) == -1) {
+    perror("sigaction");
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
 static void printPrompt(void) {
   printf("my shell > ");
   fflush(stdout);
@@ -21,7 +42,13 @@ static void printPrompt(void) {
 
 static bool readLine(char *buffer) {
   if (fgets(buffer, BUFFER_SIZE, stdin) == NULL) {
-    return false;
+    if (errno == EINTR && received_signal == SIGINT) {
+      clearerr(stdin);
+      received_signal = 0;
+      buffer[0] = '\0';
+      printf("\n");
+      return true;
+    }
   }
 
   if (strcmp(buffer, "quit\n") == 0) {
@@ -132,11 +159,10 @@ static void reapBackgroundChildren(void) {
 static int waitForChild(pid_t pid) {
   int status;
 
-  pid_t wait_result = waitpid(pid, &status, 0);
-  if (wait_result == -1) {
-    perror("waitpid failed");
-    return EXIT_FAILURE;
-  }
+  pid_t wait_result;
+  do {
+    wait_result = waitpid(pid, &status, 0);
+  } while (wait_result == -1 && errno == EINTR);
 
   if (WIFEXITED(status)) {
     return WEXITSTATUS(status);
@@ -298,6 +324,10 @@ static int tokenizeCommand(char *buffer, char **command_argv) {
 
 void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
+
+  if (setupSignalHandlers() != EXIT_SUCCESS) {
+    return;
+  }
 
   while (1) {
     reapBackgroundChildren();
