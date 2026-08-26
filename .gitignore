@@ -1,4 +1,6 @@
 minishell
 build/
-text.txt
+build-debug/
+build-sanitize/
 .DS_Store
+output.txt

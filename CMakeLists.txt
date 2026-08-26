@@ -7,8 +7,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 add_executable(minishell
-  main.c
-  shell.c
+  src/main.c
+  src/shell.c
+)
+
+target_include_directories(minishell PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
 if(MSVC)
