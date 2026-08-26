@@ -114,6 +114,12 @@ static int setupRedirection(char **command_argv, int redirection_index) {
   return EXIT_SUCCESS;
 }
 
+static void reapBackgroundChildren(void) {
+  int status;
+  while (waitpid(-1, &status, WNOHANG) > 0) {
+  }
+}
+
 static int waitForChild(pid_t pid) {
   int status;
 
@@ -216,7 +222,7 @@ static void executeChild(char **command_argv, int redirection_index) {
   _exit(EXIT_FAILURE);
 }
 
-static int executeCommand(char **command_argv) {
+static int executeCommand(char **command_argv, bool is_background) {
   if (strcmp(command_argv[0], "cd") == 0) {
     return changeDirectory(command_argv);
   }
@@ -238,6 +244,9 @@ static int executeCommand(char **command_argv) {
     executeChild(command_argv, redirection_index);
   }
 
+  if (is_background) {
+    return EXIT_SUCCESS;
+  }
   return waitForChild(pid);
 }
 
@@ -281,6 +290,7 @@ void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
 
   while (1) {
+    reapBackgroundChildren();
     printPrompt();
     bool command = readLine(buffer);
     if (command == false) {
@@ -297,7 +307,6 @@ void runShell(char *buffer) {
     }
 
     bool is_background = isBackground(command_argv, argument_count);
-
     if (is_background) {
       command_argv[argument_count - 1] = NULL;
       argument_count--;
@@ -307,7 +316,7 @@ void runShell(char *buffer) {
       break;
     }
 
-    int command_status = executeCommand(command_argv);
+    int command_status = executeCommand(command_argv, is_background);
     printf("Command status: %d\n", command_status);
   }
 }
