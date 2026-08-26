@@ -46,6 +46,13 @@ static int findRedirectionIndex(char **command_argv) {
   return -1;
 }
 
+static bool isBackground(char **command_argv, int argument_count) {
+  if (argument_count == 0) {
+    return false;
+  }
+  return strcmp(command_argv[argument_count - 1], "&") == 0;
+}
+
 static int changeDirectory(char **command_argv) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "cd: missing directory\n");
@@ -287,6 +294,13 @@ void runShell(char *buffer) {
 
     if (argument_count == 0) {
       continue;
+    }
+
+    bool is_background = isBackground(command_argv, argument_count);
+
+    if (is_background) {
+      command_argv[argument_count - 1] = NULL;
+      argument_count--;
     }
 
     if (strcmp(command_argv[0], "exit") == 0) {
