@@ -253,10 +253,17 @@ static int executePipeline(char **command_argv, int pipe_count) {
       return EXIT_FAILURE;
     }
 
+    pid_t group_leader = pids[0];
     if (pids[i] == 0) {
       if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
         _exit(EXIT_FAILURE);
       }
+
+      if (setpgid(pids[i], group_leader) == -1) {
+        perror("setpgid");
+        _exit(EXIT_FAILURE);
+      }
+
       if (i > 0) {
         dup2(pipefds[i - 1][0], STDIN_FILENO);
       }
@@ -273,6 +280,12 @@ static int executePipeline(char **command_argv, int pipe_count) {
       execvp(commands[i][0], commands[i]);
       perror("execvp failed");
       _exit(EXIT_FAILURE);
+    }
+
+    //parent
+    if (setpgid(pids[i], group_leader) == -1) {
+      perror("setpgid");
+      return EXIT_FAILURE;
     }
   }
 
@@ -331,6 +344,7 @@ static int executeCommand(char **command_argv, bool is_background) {
     executeChild(command_argv, redirection_index);
   }
 
+  //parent
   if (setpgid(pid, group_leader) == -1) {
     perror("setpgid");
     return EXIT_FAILURE;
