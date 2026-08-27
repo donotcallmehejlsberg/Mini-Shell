@@ -40,6 +40,12 @@ static int setupSignalHandlers(void) {
     return EXIT_FAILURE;
   }
 
+  // Let the shell reclaim the terminal while its process group is background
+  if (sigaction(SIGTTOU, &action, NULL) == -1) {
+    perror("sigaction SIGTTOU");
+    return EXIT_FAILURE;
+  }
+
   return EXIT_SUCCESS;
 }
 
@@ -49,6 +55,12 @@ static int restoreChildSignalHandlers(void) {
   action.sa_handler = SIG_DFL;
   sigemptyset(&action.sa_mask);
   action.sa_flags = 0;
+
+  // External commands should use the normal terminal-output signal behavior
+  if (sigaction(SIGTTOU, &action, NULL) == -1) {
+    perror("sigaction SIGTTOU");
+    return EXIT_FAILURE;
+  }
 
   if (sigaction(SIGINT, &action, NULL) == -1) {
     perror("sigaction");
@@ -245,6 +257,7 @@ static int executePipeline(char **command_argv, int pipe_count) {
     }
   }
 
+  // The first child becomes the process-group leader for the whole pipeline
   pid_t group_leader = 0;
   pid_t pids[command_count];
   for (int i = 0; i < command_count; i++) {
@@ -255,6 +268,7 @@ static int executePipeline(char **command_argv, int pipe_count) {
     }
 
     if (i == 0) {
+      // Parent sees the first child's real PID; the first child sees zero
       group_leader = pids[i];
     }
 
@@ -263,6 +277,8 @@ static int executePipeline(char **command_argv, int pipe_count) {
         _exit(EXIT_FAILURE);
       }
 
+      // Join this child to the pipeline group before replacing it with
+      // execvp()
       if (setpgid(pids[i], group_leader) == -1) {
         perror("setpgid");
         _exit(EXIT_FAILURE);
@@ -286,7 +302,7 @@ static int executePipeline(char **command_argv, int pipe_count) {
       _exit(EXIT_FAILURE);
     }
 
-    // parent
+    // Parent repeats setpgid() so scheduling order cannot cause a race
     if (setpgid(pids[i], group_leader) == -1) {
       perror("setpgid");
       return EXIT_FAILURE;
@@ -317,7 +333,8 @@ static void executeChild(char **command_argv, int redirection_index) {
   _exit(EXIT_FAILURE);
 }
 
-static int executeCommand(char **command_argv, bool is_background) {
+static int executeCommand(char **command_argv, bool is_background,
+                          pid_t shell_pgid) {
   if (strcmp(command_argv[0], "cd") == 0) {
     return changeDirectory(command_argv);
   }
@@ -335,13 +352,14 @@ static int executeCommand(char **command_argv, bool is_background) {
     return EXIT_FAILURE;
   }
 
-  // Both parent and child call setpgid() to avoid a race before execvp().
+  // For one command, the child is the leader of its own process group
   pid_t group_leader = pid;
   if (pid == 0) {
     if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
       _exit(EXIT_FAILURE);
     }
 
+    // In the child both zero arguments mean "use this process and its PID."
     if (setpgid(pid, group_leader) == -1) {
       perror("setpgid");
       _exit(EXIT_FAILURE);
@@ -349,18 +367,35 @@ static int executeCommand(char **command_argv, bool is_background) {
     executeChild(command_argv, redirection_index);
   }
 
-  // parent
+  // Parent repeats setpgid() so scheduling order cannot cause a race
   if (setpgid(pid, group_leader) == -1) {
     perror("setpgid");
     return EXIT_FAILURE;
   }
   printf("Child PID: %d, PGID: %d\n", (int)pid, (int)getpgid(pid));
 
+  // A background job must not take terminal control or block the shell
   if (is_background) {
     printf("[background] PID %d\n", (int)pid);
     return EXIT_SUCCESS;
   }
-  return waitForChild(pid);
+
+  // Keyboard input, Ctrl+C, and Ctrl+Z now target the foreground job group
+  if (tcsetpgrp(STDIN_FILENO, group_leader) == -1) {
+    perror("tcsetpgrp");
+    return EXIT_FAILURE;
+  }
+
+  // Save the status because the shell must reclaim the terminal before return
+  int command_status = waitForChild(pid);
+
+  // Give keyboard input and terminal signals back to the Mini-Shell group
+  if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
+    perror("tcsetpgrp");
+    return EXIT_FAILURE;
+  }
+
+  return command_status;
 }
 
 char *allocateBuffer(void) {
@@ -402,6 +437,9 @@ static int tokenizeCommand(char *buffer, char **command_argv) {
 void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
 
+  // Remember which process group must own the terminal while showing a prompt
+  pid_t shell_pgid = getpgrp();
+
   if (setupSignalHandlers() != EXIT_SUCCESS) {
     return;
   }
@@ -433,7 +471,8 @@ void runShell(char *buffer) {
       break;
     }
 
-    int command_status = executeCommand(command_argv, is_background);
+    int command_status =
+        executeCommand(command_argv, is_background, shell_pgid);
     printf("\nCommand status: %d\n", command_status);
   }
 }
