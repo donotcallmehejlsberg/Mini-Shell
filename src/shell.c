@@ -18,6 +18,13 @@
 
 typedef enum { RUNNING, STOPPED, DONE } JobState;
 
+typedef struct {
+  int job_id;
+  pid_t pgid;
+  char command[BUFFER_SIZE];
+  JobState state;
+} Job;
+
 // Signal handling
 static volatile sig_atomic_t received_signal = 0;
 
