@@ -330,6 +330,13 @@ static Job *findJobByPgid(pid_t pgid) {
   return -1;
 }
 
+static void updateJobState(Job *job, JobState state) {
+  if (job == NULL) {
+    return;
+  }
+  job->state = state;
+}
+
 static void removeJob(Job *job) {
   if (job == NULL) {
     return;
