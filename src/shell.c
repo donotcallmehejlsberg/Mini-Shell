@@ -312,6 +312,59 @@ static int addJob(pid_t pgid, const char *command, JobState state) {
   return -1;
 }
 
+static Job *findJobById(int job_id) {
+  for (int i = 0; i < MAX_JOBS; i++) {
+    if (jobs[i].job_id == job_id) {
+      return jobs[i].job_id;
+    }
+  }
+  return -1;
+}
+
+static Job *findJobByPgid(pid_t pgid) {
+  for (int i = 0; i < MAX_JOBS; i++) {
+    if (jobs[i].pgid == pgid) {
+      return jobs[i].pgid;
+    }
+  }
+  return -1;
+}
+
+static void removeJob(Job *job) {
+  if (job == NULL) {
+    return;
+  }
+  memset(job, 0, sizeof(*job));
+}
+
+static const char *jobStateToString(JobState state) {
+  switch (state) {
+    case RUNNING:
+      return "Running";
+    case STOPPED:
+      return "Stopped";
+    case DONE:
+      return "Done";
+  }
+  return "Unknown";
+}
+
+static void printJobs(void) {
+  for (int i = 0; i < MAX_JOBS; i++) {
+    if (jobs[i].job_id == 0) {
+      continue;
+    }
+
+    printf("[%d] %-7s %s", jobs[i].job_id, jobStateToString(jobs[i].state),
+           jobs[i].command);
+
+    size_t command_length = strlen(jobs[i].command);
+    if (command_length == 0 || jobs[i].command[command_length - 1] != '\n') {
+      printf("\n");
+    }
+  }
+}
+
 // Pipeline execution
 static int executePipeline(char **command_argv, int pipe_count,
                            bool is_background, pid_t shell_pgid) {
