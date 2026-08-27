@@ -18,6 +18,7 @@
 
 typedef enum { RUNNING, STOPPED, DONE } JobState;
 
+// Signal handling
 static volatile sig_atomic_t received_signal = 0;
 
 static void handleSignal(int signal_number) { received_signal = signal_number; }
@@ -75,6 +76,16 @@ static int restoreChildSignalHandlers(void) {
   return EXIT_SUCCESS;
 }
 
+// Input and parsing
+char *allocateBuffer(void) {
+  char *buffer = calloc(BUFFER_SIZE, sizeof(char));
+  if (buffer == NULL) {
+    fprintf(stderr, "Memory allocation failed\n");
+    return NULL;
+  }
+  return buffer;
+}
+
 static void printPrompt(void) {
   printf("my shell > ");
   fflush(stdout);
@@ -98,6 +109,39 @@ static bool readLine(char *buffer) {
   return true;
 }
 
+static int tokenizeCommand(char *buffer, char **command_argv) {
+  int argument_count = 0;
+  const char delimiters[] = " \t\n";
+
+  char *token = strtok(buffer, delimiters);
+  if (token == NULL) {
+    command_argv[0] = NULL;
+    return 0;
+  }
+
+  while (token != NULL && argument_count < MAX_ARGUMENTS) {
+    command_argv[argument_count] = token;
+    argument_count++;
+
+    token = strtok(NULL, delimiters);
+  }
+
+  if (token != NULL) {
+    fprintf(stderr, "Too many arguments\n");
+    return -1;
+  }
+
+  command_argv[argument_count] = NULL;
+  return argument_count;
+}
+
+static bool isBackground(char **command_argv, int argument_count) {
+  if (argument_count == 0) {
+    return false;
+  }
+  return strcmp(command_argv[argument_count - 1], "&") == 0;
+}
+
 static int findRedirectionIndex(char **command_argv) {
   for (int i = 1; command_argv[i] != NULL; i++) {
     if (strcmp(command_argv[i], ">") == 0) {
@@ -113,13 +157,17 @@ static int findRedirectionIndex(char **command_argv) {
   return -1;
 }
 
-static bool isBackground(char **command_argv, int argument_count) {
-  if (argument_count == 0) {
-    return false;
+static int countPipes(char **command_argv) {
+  int count = 0;
+  for (int i = 1; command_argv[i] != NULL; i++) {
+    if (strcmp(command_argv[i], "|") == 0) {
+      count++;
+    }
   }
-  return strcmp(command_argv[argument_count - 1], "&") == 0;
+  return count;
 }
 
+// Built-in commands and redirection
 static int changeDirectory(char **command_argv) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "cd: missing directory\n");
@@ -181,6 +229,7 @@ static int setupRedirection(char **command_argv, int redirection_index) {
   return EXIT_SUCCESS;
 }
 
+// Process lifecycle
 static void reapBackgroundChildren(void) {
   int status;
   pid_t finished_pid;
@@ -226,16 +275,18 @@ static int waitForChild(pid_t pid) {
   return EXIT_FAILURE;
 }
 
-static int countPipes(char **command_argv) {
-  int count = 0;
-  for (int i = 1; command_argv[i] != NULL; i++) {
-    if (strcmp(command_argv[i], "|") == 0) {
-      count++;
-    }
+static void executeChild(char **command_argv, int redirection_index) {
+  if (setupRedirection(command_argv, redirection_index) != EXIT_SUCCESS) {
+    _exit(EXIT_FAILURE);
   }
-  return count;
+
+  execvp(command_argv[0], command_argv);
+
+  perror("execvp failed");
+  _exit(EXIT_FAILURE);
 }
 
+// Pipeline execution
 static int executePipeline(char **command_argv, int pipe_count,
                            bool is_background, pid_t shell_pgid) {
   int pipefds[pipe_count][PIPE_END_COUNT];
@@ -343,17 +394,7 @@ static int executePipeline(char **command_argv, int pipe_count,
   return pipeline_status;
 }
 
-static void executeChild(char **command_argv, int redirection_index) {
-  if (setupRedirection(command_argv, redirection_index) != EXIT_SUCCESS) {
-    _exit(EXIT_FAILURE);
-  }
-
-  execvp(command_argv[0], command_argv);
-
-  perror("execvp failed");
-  _exit(EXIT_FAILURE);
-}
-
+// Command dispatch and execution
 static int executeCommand(char **command_argv, bool is_background,
                           pid_t shell_pgid) {
   if (strcmp(command_argv[0], "cd") == 0) {
@@ -419,42 +460,7 @@ static int executeCommand(char **command_argv, bool is_background,
   return command_status;
 }
 
-char *allocateBuffer(void) {
-  char *buffer = calloc(BUFFER_SIZE, sizeof(char));
-  if (buffer == NULL) {
-    fprintf(stderr, "Memory allocation failed\n");
-    return NULL;
-  }
-  return buffer;
-}
-
-static int tokenizeCommand(char *buffer, char **command_argv) {
-  int argument_count = 0;
-  const char delimiters[] = " \t\n";
-
-  char *token;
-  token = strtok(buffer, delimiters);
-  if (token == NULL) {
-    command_argv[0] = NULL;
-    return 0;
-  }
-
-  while (token != NULL && argument_count < MAX_ARGUMENTS) {
-    command_argv[argument_count] = token;
-    argument_count++;
-
-    token = strtok(NULL, delimiters);
-  }
-
-  if (token != NULL) {
-    fprintf(stderr, "Too many arguments\n");
-    return -1;
-  }
-
-  command_argv[argument_count] = NULL;
-  return argument_count;
-}
-
+// Shell lifecycle
 void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
 
