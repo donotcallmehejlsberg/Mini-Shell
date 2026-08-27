@@ -16,6 +16,8 @@
 #define MAX_ARGUMENTS 32
 #define PIPE_END_COUNT 2
 
+typedef enum { RUNNING, STOPPED, DONE } JobState;
+
 static volatile sig_atomic_t received_signal = 0;
 
 static void handleSignal(int signal_number) { received_signal = signal_number; }
@@ -315,12 +317,25 @@ static int executeCommand(char **command_argv, bool is_background) {
     return EXIT_FAILURE;
   }
 
+  // Both parent and child call setpgid() to avoid a race before execvp().
+  pid_t group_leader = pid;
   if (pid == 0) {
     if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
       _exit(EXIT_FAILURE);
     }
+
+    if (setpgid(pid, group_leader) == -1) {
+      perror("setpgid");
+      _exit(EXIT_FAILURE);
+    }
     executeChild(command_argv, redirection_index);
   }
+
+  if (setpgid(pid, group_leader) == -1) {
+    perror("setpgid");
+    return EXIT_FAILURE;
+  }
+  printf("Child PID: %d, PGID: %d\n", (int)pid, (int)getpgid(pid));
 
   if (is_background) {
     printf("[background] PID %d\n", (int)pid);
