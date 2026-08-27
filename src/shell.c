@@ -236,7 +236,8 @@ static int countPipes(char **command_argv) {
   return count;
 }
 
-static int executePipeline(char **command_argv, int pipe_count) {
+static int executePipeline(char **command_argv, int pipe_count,
+                           bool is_background, pid_t shell_pgid) {
   int pipefds[pipe_count][PIPE_END_COUNT];
   for (int i = 0; i < pipe_count; i++) {
     if (pipe(pipefds[i]) == -1) {
@@ -315,11 +316,31 @@ static int executePipeline(char **command_argv, int pipe_count) {
     close(pipefds[i][1]);
   }
 
+  // A background pipeline keeps running without terminal control or waiting
+  if (is_background) {
+    printf("[background] PGID %d\n", (int)group_leader);
+    return EXIT_SUCCESS;
+  }
+
+  // Give terminal input and signals to the entire foreground pipeline group
+  if (tcsetpgrp(STDIN_FILENO, group_leader) == -1) {
+    perror("tcsetpgrp");
+    return EXIT_FAILURE;
+  }
+
   for (int i = 0; i < command_count - 1; i++) {
     waitForChild(pids[i]);
   }
 
-  return waitForChild(pids[command_count - 1]);
+  int pipeline_status = waitForChild(pids[command_count - 1]);
+
+  // Reclaim the terminal after every process in the pipeline has been handled
+  if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
+    perror("tcsetpgrp");
+    return EXIT_FAILURE;
+  }
+
+  return pipeline_status;
 }
 
 static void executeChild(char **command_argv, int redirection_index) {
@@ -341,7 +362,7 @@ static int executeCommand(char **command_argv, bool is_background,
 
   int pipe_count = countPipes(command_argv);
   if (pipe_count > 0) {
-    return executePipeline(command_argv, pipe_count);
+    return executePipeline(command_argv, pipe_count, is_background, shell_pgid);
   }
 
   int redirection_index = findRedirectionIndex(command_argv);
