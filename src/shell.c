@@ -245,6 +245,7 @@ static int executePipeline(char **command_argv, int pipe_count) {
     }
   }
 
+  pid_t group_leader = 0;
   pid_t pids[command_count];
   for (int i = 0; i < command_count; i++) {
     pids[i] = fork();
@@ -253,7 +254,10 @@ static int executePipeline(char **command_argv, int pipe_count) {
       return EXIT_FAILURE;
     }
 
-    pid_t group_leader = pids[0];
+    if (i == 0) {
+      group_leader = pids[i];
+    }
+
     if (pids[i] == 0) {
       if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
         _exit(EXIT_FAILURE);
@@ -282,11 +286,12 @@ static int executePipeline(char **command_argv, int pipe_count) {
       _exit(EXIT_FAILURE);
     }
 
-    //parent
+    // parent
     if (setpgid(pids[i], group_leader) == -1) {
       perror("setpgid");
       return EXIT_FAILURE;
     }
+    printf("Child PID: %d, PGID: %d\n", (int)pids[i], (int)getpgid(pids[i]));
   }
 
   for (int i = 0; i < pipe_count; i++) {
@@ -344,7 +349,7 @@ static int executeCommand(char **command_argv, bool is_background) {
     executeChild(command_argv, redirection_index);
   }
 
-  //parent
+  // parent
   if (setpgid(pid, group_leader) == -1) {
     perror("setpgid");
     return EXIT_FAILURE;
