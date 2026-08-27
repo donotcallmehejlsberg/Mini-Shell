@@ -487,6 +487,11 @@ static int executeCommand(char **command_argv, bool is_background,
     return changeDirectory(command_argv);
   }
 
+  if (strcmp(command_argv[0], "jobs") == 0) {
+    printJobs();
+    return EXIT_SUCCESS;
+  }
+
   int pipe_count = countPipes(command_argv);
   if (pipe_count > 0) {
     return executePipeline(command_argv, pipe_count, is_background, shell_pgid);
