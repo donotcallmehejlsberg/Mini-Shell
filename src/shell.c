@@ -15,6 +15,7 @@
 #define BUFFER_SIZE 256
 #define MAX_ARGUMENTS 32
 #define PIPE_END_COUNT 2
+#define MAX_JOBS 5
 
 typedef enum { RUNNING, STOPPED, DONE } JobState;
 
@@ -24,6 +25,9 @@ typedef struct {
   char command[BUFFER_SIZE];
   JobState state;
 } Job;
+
+static Job jobs[MAX_JOBS] = {0};
+static int next_job_id = 1;
 
 // Signal handling
 static volatile sig_atomic_t received_signal = 0;
@@ -293,6 +297,21 @@ static void executeChild(char **command_argv, int redirection_index) {
   _exit(EXIT_FAILURE);
 }
 
+static int addJob(pid_t pgid, const char *command, JobState state) {
+  for (int i = 0; i < MAX_JOBS; i++) {
+    if (jobs[i].job_id == 0) {
+      jobs[i].job_id = next_job_id;
+      jobs[i].pgid = pgid;
+      snprintf(jobs[i].command, sizeof(jobs[i].command), "%s", command);
+      jobs[i].state = state;
+
+      next_job_id++;
+      return jobs[i].job_id;
+    }
+  }
+  return -1;
+}
+
 // Pipeline execution
 static int executePipeline(char **command_argv, int pipe_count,
                            bool is_background, pid_t shell_pgid) {
@@ -403,7 +422,7 @@ static int executePipeline(char **command_argv, int pipe_count,
 
 // Command dispatch and execution
 static int executeCommand(char **command_argv, bool is_background,
-                          pid_t shell_pgid) {
+                          pid_t shell_pgid, const char *command_text) {
   if (strcmp(command_argv[0], "cd") == 0) {
     return changeDirectory(command_argv);
   }
@@ -445,7 +464,8 @@ static int executeCommand(char **command_argv, bool is_background,
 
   // A background job must not take terminal control or block the shell
   if (is_background) {
-    printf("[background] PID %d\n", (int)pid);
+    int job_id = addJob(group_leader, command_text, RUNNING);
+    printf("[background] PID %d %d\n", (int)pid, job_id);
     return EXIT_SUCCESS;
   }
 
@@ -486,6 +506,9 @@ void runShell(char *buffer) {
       break;
     }
 
+    char command_copy[BUFFER_SIZE];
+    snprintf(command_copy, sizeof(command_copy), "%s", buffer);
+
     int argument_count = tokenizeCommand(buffer, command_argv);
     if (argument_count < 0) {
       continue;
@@ -506,7 +529,7 @@ void runShell(char *buffer) {
     }
 
     int command_status =
-        executeCommand(command_argv, is_background, shell_pgid);
+        executeCommand(command_argv, is_background, shell_pgid, command_copy);
     printf("\nCommand status: %d\n", command_status);
   }
 }
