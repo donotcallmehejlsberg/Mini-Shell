@@ -18,6 +18,11 @@ target_include_directories(minishell PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
+# Expose POSIX process and signal APIs when compiling in strict C17 mode.
+target_compile_definitions(minishell PRIVATE
+  _POSIX_C_SOURCE=200809L
+)
+
 if(MSVC)
   target_compile_options(minishell PRIVATE
     /W4
