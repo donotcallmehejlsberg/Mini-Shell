@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 add_executable(minishell
   src/main.c
   src/job.c
+  src/parser.c
   src/shell.c
 )
 

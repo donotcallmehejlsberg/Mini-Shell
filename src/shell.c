@@ -1,6 +1,7 @@
 #include "shell.h"
 
 #include "job.h"
+#include "parser.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -15,7 +16,6 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 256
-#define MAX_ARGUMENTS 32
 #define PIPE_END_COUNT 2
 
 // Signal handling
@@ -107,64 +107,6 @@ static bool readLine(char *buffer) {
   }
 
   return true;
-}
-
-static int tokenizeCommand(char *buffer, char **command_argv) {
-  int argument_count = 0;
-  const char delimiters[] = " \t\n";
-
-  char *token = strtok(buffer, delimiters);
-  if (token == NULL) {
-    command_argv[0] = NULL;
-    return 0;
-  }
-
-  while (token != NULL && argument_count < MAX_ARGUMENTS) {
-    command_argv[argument_count] = token;
-    argument_count++;
-
-    token = strtok(NULL, delimiters);
-  }
-
-  if (token != NULL) {
-    fprintf(stderr, "Too many arguments\n");
-    return -1;
-  }
-
-  command_argv[argument_count] = NULL;
-  return argument_count;
-}
-
-static bool isBackground(char **command_argv, int argument_count) {
-  if (argument_count == 0) {
-    return false;
-  }
-  return strcmp(command_argv[argument_count - 1], "&") == 0;
-}
-
-static int findRedirectionIndex(char **command_argv) {
-  for (int i = 1; command_argv[i] != NULL; i++) {
-    if (strcmp(command_argv[i], ">") == 0) {
-      return i;
-    }
-    if (strcmp(command_argv[i], "<") == 0) {
-      return i;
-    }
-    if (strcmp(command_argv[i], ">>") == 0) {
-      return i;
-    }
-  }
-  return -1;
-}
-
-static int countPipes(char **command_argv) {
-  int count = 0;
-  for (int i = 1; command_argv[i] != NULL; i++) {
-    if (strcmp(command_argv[i], "|") == 0) {
-      count++;
-    }
-  }
-  return count;
 }
 
 // Built-in commands and redirection
