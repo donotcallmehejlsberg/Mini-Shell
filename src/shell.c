@@ -275,7 +275,7 @@ static void reapBackgroundChildren(void) {
   }
 }
 
-static int waitForChild(pid_t pid) {
+static int waitForChild(pid_t pid, JobState *job_state) {
   int status;
   pid_t wait_result;
 
@@ -289,17 +289,20 @@ static int waitForChild(pid_t pid) {
   }
 
   if (WIFEXITED(status)) {
+    *job_state = DONE;
     return WEXITSTATUS(status);
   }
 
   if (WIFSIGNALED(status)) {
+    *job_state = DONE;
     return 128 + WTERMSIG(status);
   }
 
   if (WIFSTOPPED(status)) {
+    *job_state = STOPPED;
     int signal_number = WSTOPSIG(status);
     printf("\n[stopped] PID %d by signal %d\n", (int)pid, signal_number);
-    return 128 + signal_number;
+    return 128 + WSTOPSIG(status);
   }
 
   return EXIT_FAILURE;
@@ -484,11 +487,12 @@ static int executePipeline(char **command_argv, int pipe_count,
     return EXIT_FAILURE;
   }
 
+  JobState job_state;
   for (int i = 0; i < command_count - 1; i++) {
-    waitForChild(pids[i]);
+    waitForChild(pids[i], &job_state);
   }
 
-  int pipeline_status = waitForChild(pids[command_count - 1]);
+  int pipeline_status = waitForChild(pids[command_count - 1], &job_state);
 
   // Reclaim the terminal after every process in the pipeline has been handled
   if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
@@ -560,7 +564,8 @@ static int executeCommand(char **command_argv, bool is_background,
   }
 
   // Save the status because the shell must reclaim the terminal before return
-  int command_status = waitForChild(pid);
+  JobState job_state; 
+  int command_status = waitForChild(pid, &job_state);
 
   // Give keyboard input and terminal signals back to the Mini-Shell group
   if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
