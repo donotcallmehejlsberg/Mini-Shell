@@ -564,8 +564,11 @@ static int executeCommand(char **command_argv, bool is_background,
   }
 
   // Save the status because the shell must reclaim the terminal before return
-  JobState job_state; 
+  JobState job_state;
   int command_status = waitForChild(pid, &job_state);
+  if (job_state == STOPPED) {
+    addJob(group_leader, command_text, STOPPED);
+  }
 
   // Give keyboard input and terminal signals back to the Mini-Shell group
   if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
