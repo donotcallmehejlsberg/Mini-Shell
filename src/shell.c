@@ -334,14 +334,14 @@ static int addJob(pid_t pgid, const char *command, JobState state) {
   return -1;
 }
 
-/*static Job *findJobById(int job_id) {
+static Job *findJobById(int job_id) {
   for (int i = 0; i < MAX_JOBS; i++) {
     if (jobs[i].job_id == job_id) {
       return &jobs[i];
     }
   }
   return NULL;
-}*/
+}
 
 /*
 kill(pid, SIGTERM);  // Request process termination
@@ -534,6 +534,18 @@ static int executeCommand(char **command_argv, bool is_background,
   if (strcmp(command_argv[0], "jobs") == 0) {
     printJobs();
     return EXIT_SUCCESS;
+  }
+
+  if (strcmp(command_argv[0], "bg") == 0) {
+    if (command_argv[1] == NULL) {
+      fprintf(stderr, "bg: missing job ID\n");
+      return EXIT_FAILURE;
+    }
+
+    int job_id = atoi(command_argv[1]);
+    Job *job = findJobById(job_id);
+
+    return bg(job);
   }
 
   int pipe_count = countPipes(command_argv);
