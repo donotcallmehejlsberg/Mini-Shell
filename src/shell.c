@@ -29,6 +29,10 @@ typedef struct {
 static Job jobs[MAX_JOBS] = {0};
 static int next_job_id = 1;
 
+static Job *findJobByPgid(pid_t pgid);
+static void updateJobState(Job *job, JobState state);
+static void removeJob(Job *job);
+
 // Signal handling
 static volatile sig_atomic_t received_signal = 0;
 
@@ -246,12 +250,27 @@ static void reapBackgroundChildren(void) {
   pid_t finished_pid;
 
   while ((finished_pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    Job *job = findJobByPgid(finished_pid);
+
     if (WIFEXITED(status)) {
       printf("[background] PID %d finished with status %d\n", (int)finished_pid,
              WEXITSTATUS(status));
+
+      if (job != NULL) {
+        updateJobState(job, DONE);
+        printf("[%d] Done (status %d): %s", job->job_id, WEXITSTATUS(status),
+               job->command);
+        removeJob(job);
+      }
     } else if (WIFSIGNALED(status)) {
       printf("[background] PID %d terminated by signal %d\n", (int)finished_pid,
              WTERMSIG(status));
+
+      if (job != NULL) {
+        updateJobState(job, DONE);
+        printf("[%d] Done: %s", job->job_id, job->command);
+        removeJob(job);
+      }
     }
   }
 }
@@ -319,7 +338,7 @@ static int addJob(pid_t pgid, const char *command, JobState state) {
     }
   }
   return NULL;
-}
+}*/
 
 static Job *findJobByPgid(pid_t pgid) {
   for (int i = 0; i < MAX_JOBS; i++) {
@@ -342,7 +361,7 @@ static void removeJob(Job *job) {
     return;
   }
   memset(job, 0, sizeof(*job));
-}*/
+}
 
 static const char *jobStateToString(JobState state) {
   switch (state) {
