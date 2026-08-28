@@ -1,7 +1,7 @@
 #include "shell.h"
-
 #include "job.h"
 #include "parser.h"
+#include "signal_handler.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -17,64 +17,6 @@
 
 #define BUFFER_SIZE 256
 #define PIPE_END_COUNT 2
-
-// Signal handling
-static volatile sig_atomic_t received_signal = 0;
-
-static void handleSignal(int signal_number) { received_signal = signal_number; }
-
-static int setupSignalHandlers(void) {
-  struct sigaction action = {0};
-
-  action.sa_handler = handleSignal;
-  sigemptyset(&action.sa_mask);
-  action.sa_flags = 0;
-
-  if (sigaction(SIGINT, &action, NULL) == -1) {
-    perror("sigaction");
-    return EXIT_FAILURE;
-  }
-
-  action.sa_handler = SIG_IGN;
-  if (sigaction(SIGTSTP, &action, NULL) == -1) {
-    perror("sigaction");
-    return EXIT_FAILURE;
-  }
-
-  // Let the shell reclaim the terminal while its process group is background
-  if (sigaction(SIGTTOU, &action, NULL) == -1) {
-    perror("sigaction SIGTTOU");
-    return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
-}
-
-static int restoreChildSignalHandlers(void) {
-  struct sigaction action = {0};
-
-  action.sa_handler = SIG_DFL;
-  sigemptyset(&action.sa_mask);
-  action.sa_flags = 0;
-
-  // External commands should use the normal terminal-output signal behavior
-  if (sigaction(SIGTTOU, &action, NULL) == -1) {
-    perror("sigaction SIGTTOU");
-    return EXIT_FAILURE;
-  }
-
-  if (sigaction(SIGINT, &action, NULL) == -1) {
-    perror("sigaction");
-    return EXIT_FAILURE;
-  }
-
-  if (sigaction(SIGTSTP, &action, NULL) == -1) {
-    perror("sigaction");
-    return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
-}
 
 // Input and parsing
 char *allocateBuffer(void) {
@@ -93,9 +35,8 @@ static void printPrompt(void) {
 
 static bool readLine(char *buffer) {
   if (fgets(buffer, BUFFER_SIZE, stdin) == NULL) {
-    if (errno == EINTR && received_signal == SIGINT) {
+    if (errno == EINTR && consumeInterruptSignal()) {
       clearerr(stdin);
-      received_signal = 0;
       buffer[0] = '\0';
       printf("\n");
       return true;
@@ -266,6 +207,7 @@ static int bg(Job *job) {
   job->state = RUNNING;
   return EXIT_SUCCESS;
 }
+
 static int fg(Job *job, pid_t shell_pgid) {
   if (job == NULL) {
     fprintf(stderr, "fg: job not found\n");
