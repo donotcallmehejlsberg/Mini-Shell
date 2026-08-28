@@ -312,22 +312,22 @@ static int addJob(pid_t pgid, const char *command, JobState state) {
   return -1;
 }
 
-static Job *findJobById(int job_id) {
+/*static Job *findJobById(int job_id) {
   for (int i = 0; i < MAX_JOBS; i++) {
     if (jobs[i].job_id == job_id) {
-      return jobs[i].job_id;
+      return &jobs[i];
     }
   }
-  return -1;
+  return NULL;
 }
 
 static Job *findJobByPgid(pid_t pgid) {
   for (int i = 0; i < MAX_JOBS; i++) {
     if (jobs[i].pgid == pgid) {
-      return jobs[i].pgid;
+      return &jobs[i];
     }
   }
-  return -1;
+  return NULL;
 }
 
 static void updateJobState(Job *job, JobState state) {
@@ -342,7 +342,7 @@ static void removeJob(Job *job) {
     return;
   }
   memset(job, 0, sizeof(*job));
-}
+}*/
 
 static const char *jobStateToString(JobState state) {
   switch (state) {
