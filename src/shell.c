@@ -343,6 +343,27 @@ static int addJob(pid_t pgid, const char *command, JobState state) {
   return NULL;
 }*/
 
+/*
+kill(pid, SIGTERM);  // Request process termination
+kill(pid, SIGSTOP);  // Stop the process
+kill(pid, SIGCONT);  // Continue a stopped process
+*/
+
+static int bg(Job *job) {
+  if (job == NULL) {
+    fprintf(stderr, "bg: job not found\n");
+    return EXIT_FAILURE;
+  }
+
+  if (kill(-job->pgid, SIGCONT) == -1) {
+    perror("kill");
+    return EXIT_FAILURE;
+  }
+
+  job->state = RUNNING;
+  return EXIT_SUCCESS;
+}
+
 static Job *findJobByPgid(pid_t pgid) {
   for (int i = 0; i < MAX_JOBS; i++) {
     if (jobs[i].pgid == pgid) {
