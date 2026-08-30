@@ -1,11 +1,5 @@
 #include "shell.h"
-#include "job.h"
-#include "parser.h"
-#include "process.h"
-#include "signal_handler.h"
-#include "buildin.h"
 
-#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -17,40 +11,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 256
+#include "buildin.h"
+#include "input.h"
+#include "job.h"
+#include "parser.h"
+#include "process.h"
+#include "signal_handler.h"
+
 #define PIPE_END_COUNT 2
-
-// Input and parsing
-char *allocateBuffer(void) {
-  char *buffer = calloc(BUFFER_SIZE, sizeof(char));
-  if (buffer == NULL) {
-    fprintf(stderr, "Memory allocation failed\n");
-    return NULL;
-  }
-  return buffer;
-}
-
-static void printPrompt(void) {
-  printf("my shell > ");
-  fflush(stdout);
-}
-
-static bool readLine(char *buffer) {
-  if (fgets(buffer, BUFFER_SIZE, stdin) == NULL) {
-    if (errno == EINTR && consumeInterruptSignal()) {
-      clearerr(stdin);
-      buffer[0] = '\0';
-      printf("\n");
-      return true;
-    }
-  }
-
-  if (strcmp(buffer, "quit\n") == 0) {
-    return false;
-  }
-
-  return true;
-}
 
 // Redirection
 static int setupRedirection(char **command_argv, int redirection_index) {

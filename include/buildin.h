@@ -1,5 +1,5 @@
-#ifndef BUILD_IN_COMMAND
-#define BUILD_IN_COMMAND
+#ifndef BUILD_IN_COMMAND_H_
+#define BUILD_IN_COMMAND_H_
 
 #include <stdbool.h>
 #include <sys/types.h>

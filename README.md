@@ -75,6 +75,7 @@ larger shells.
 ```text
 include/
   buildin.h         Built-in command dispatch interface
+  input.h           Input buffer and prompt interface
   job.h             Job types and job-table interface
   parser.h          Command parsing interface
   process.h         Child-process waiting interface
@@ -83,6 +84,7 @@ include/
 
 src/
   buildin.c         Built-in cd, jobs, fg, and bg commands
+  input.c           Input buffer, line reading, and prompt output
   job.c             Job storage and state management
   main.c            Program entry point
   parser.c          Tokenization and operator detection
@@ -102,6 +104,8 @@ The project is divided by responsibility:
   terminal control.
 - `buildin.c` detects and executes the built-in `cd`, `jobs`, `fg`, and `bg`
   commands.
+- `input.c` allocates the input buffer, reads command lines, and prints the
+  interactive prompt.
 - `parser.c` converts the input buffer into an argument vector and detects
   background execution, redirection operators, and pipes.
 - `process.c` waits for a child and converts its wait status into a command
