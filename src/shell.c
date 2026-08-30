@@ -100,37 +100,6 @@ static int setupRedirection(char **command_argv, int redirection_index) {
   return EXIT_SUCCESS;
 }
 
-// Process lifecycle
-static void reapBackgroundChildren(void) {
-  int status;
-  pid_t finished_pid;
-
-  while ((finished_pid = waitpid(-1, &status, WNOHANG)) > 0) {
-    Job *job = findJobByPgid(finished_pid);
-
-    if (WIFEXITED(status)) {
-      printf("[background] PID %d finished with status %d\n", (int)finished_pid,
-             WEXITSTATUS(status));
-
-      if (job != NULL) {
-        updateJobState(job, DONE);
-        printf("[%d] Done (status %d): %s", job->job_id, WEXITSTATUS(status),
-               job->command);
-        removeJob(job);
-      }
-    } else if (WIFSIGNALED(status)) {
-      printf("[background] PID %d terminated by signal %d\n", (int)finished_pid,
-             WTERMSIG(status));
-
-      if (job != NULL) {
-        updateJobState(job, DONE);
-        printf("[%d] Done: %s", job->job_id, job->command);
-        removeJob(job);
-      }
-    }
-  }
-}
-
 static void executeChild(char **command_argv, int redirection_index) {
   if (setupRedirection(command_argv, redirection_index) != EXIT_SUCCESS) {
     _exit(EXIT_FAILURE);

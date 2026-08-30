@@ -6,5 +6,6 @@
 #include "job.h"
 
 int waitForChild(pid_t pid, JobState *job_state);
+void reapBackgroundChildren(void);
 
 #endif
