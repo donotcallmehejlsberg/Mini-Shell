@@ -7,9 +7,11 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 add_executable(minishell
+  src/buildin.c
   src/main.c
   src/job.c
   src/parser.c
+  src/process.c
   src/signal_handler.c
   src/shell.c
 )

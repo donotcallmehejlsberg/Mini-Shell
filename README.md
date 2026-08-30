@@ -74,15 +74,19 @@ larger shells.
 
 ```text
 include/
+  buildin.h         Built-in command dispatch interface
   job.h             Job types and job-table interface
   parser.h          Command parsing interface
+  process.h         Child-process waiting interface
   shell.h           Public shell interface
   signal_handler.h  Signal-handling interface
 
 src/
+  buildin.c         Built-in cd, jobs, fg, and bg commands
   job.c             Job storage and state management
   main.c            Program entry point
   parser.c          Tokenization and operator detection
+  process.c         Child waiting and process-status conversion
   shell.c           Shell loop, execution, pipelines, and terminal control
   signal_handler.c  Shell and child signal configuration
 ```
@@ -96,8 +100,12 @@ The project is divided by responsibility:
 - `shell.c` owns the interactive loop and coordinates built-in commands,
   external-command execution, redirection, pipelines, process groups, and
   terminal control.
+- `buildin.c` detects and executes the built-in `cd`, `jobs`, `fg`, and `bg`
+  commands.
 - `parser.c` converts the input buffer into an argument vector and detects
   background execution, redirection operators, and pipes.
+- `process.c` waits for a child and converts its wait status into a command
+  status and job state.
 - `job.c` owns the private job table, generates Job IDs, and provides
   operations for finding, updating, printing, and removing jobs.
 - `signal_handler.c` configures shell signal behavior, restores default signal
@@ -117,11 +125,13 @@ runShell() in shell.c
   |      tokenize command
   |      detect &, redirection, and pipes
   |
-  +--> built-in command --------------------> cd / jobs / fg / bg
+  +--> buildin.c ----------------------------> cd / jobs / fg / bg
   |
   +--> single external command -------------> fork / redirection / execvp
   |
   +--> pipeline -----------------------------> pipes / process group / execvp
+  |
+  +--> process.c ----------------------------> wait for child / report state
   |
   +--> job.c --------------------------------> store and update jobs
   |
@@ -129,8 +139,8 @@ runShell() in shell.c
 ```
 
 `shell.c` currently remains the largest module because process creation,
-pipeline execution, built-in dispatch, and terminal control still live there.
-These responsibilities can be separated further as the project grows.
+pipeline execution, redirection, and terminal control still live there. These
+responsibilities can be separated further as the project grows.
 
 ## Current Limitations
 

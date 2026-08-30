@@ -1,7 +1,9 @@
 #include "shell.h"
 #include "job.h"
 #include "parser.h"
+#include "process.h"
 #include "signal_handler.h"
+#include "buildin.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -50,21 +52,7 @@ static bool readLine(char *buffer) {
   return true;
 }
 
-// Built-in commands and redirection
-static int changeDirectory(char **command_argv) {
-  if (command_argv[1] == NULL) {
-    fprintf(stderr, "cd: missing directory\n");
-    return EXIT_FAILURE;
-  }
-
-  if (chdir(command_argv[1]) != 0) {
-    perror("cd");
-    return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
-}
-
+// Redirection
 static int setupRedirection(char **command_argv, int redirection_index) {
   if (redirection_index == -1) {
     return EXIT_SUCCESS;
@@ -143,39 +131,6 @@ static void reapBackgroundChildren(void) {
   }
 }
 
-static int waitForChild(pid_t pid, JobState *job_state) {
-  int status;
-  pid_t wait_result;
-
-  do {
-    wait_result = waitpid(pid, &status, WUNTRACED);
-  } while (wait_result == -1 && errno == EINTR);
-
-  if (wait_result == -1) {
-    perror("waitpid failed");
-    return EXIT_FAILURE;
-  }
-
-  if (WIFEXITED(status)) {
-    *job_state = DONE;
-    return WEXITSTATUS(status);
-  }
-
-  if (WIFSIGNALED(status)) {
-    *job_state = DONE;
-    return 128 + WTERMSIG(status);
-  }
-
-  if (WIFSTOPPED(status)) {
-    *job_state = STOPPED;
-    int signal_number = WSTOPSIG(status);
-    printf("\n[stopped] PID %d by signal %d\n", (int)pid, signal_number);
-    return 128 + WSTOPSIG(status);
-  }
-
-  return EXIT_FAILURE;
-}
-
 static void executeChild(char **command_argv, int redirection_index) {
   if (setupRedirection(command_argv, redirection_index) != EXIT_SUCCESS) {
     _exit(EXIT_FAILURE);
@@ -192,57 +147,6 @@ kill(pid, SIGTERM);  // Request process termination
 kill(pid, SIGSTOP);  // Stop the process
 kill(pid, SIGCONT);  // Continue a stopped process
 */
-
-static int bg(Job *job) {
-  if (job == NULL) {
-    fprintf(stderr, "bg: job not found\n");
-    return EXIT_FAILURE;
-  }
-
-  if (kill(-job->pgid, SIGCONT) == -1) {
-    perror("kill");
-    return EXIT_FAILURE;
-  }
-
-  job->state = RUNNING;
-  return EXIT_SUCCESS;
-}
-
-static int fg(Job *job, pid_t shell_pgid) {
-  if (job == NULL) {
-    fprintf(stderr, "fg: job not found\n");
-    return EXIT_FAILURE;
-  }
-
-  if (tcsetpgrp(STDIN_FILENO, job->pgid) == -1) {
-    perror("tcsetpgrp");
-    return EXIT_FAILURE;
-  }
-
-  if (kill(-job->pgid, SIGCONT) == -1) {
-    perror("kill");
-    tcsetpgrp(STDIN_FILENO, shell_pgid);
-    return EXIT_FAILURE;
-  }
-
-  job->state = RUNNING;
-
-  JobState job_state = RUNNING;
-  int command_status = waitForChild(job->pgid, &job_state);
-
-  if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
-    perror("tcsetpgrp");
-    return EXIT_FAILURE;
-  }
-
-  if (job_state == DONE) {
-    removeJob(job);
-  } else if (job_state == STOPPED) {
-    job->state = STOPPED;
-  }
-
-  return command_status;
-}
 
 // Pipeline execution
 static int executePipeline(char **command_argv, int pipe_count,
@@ -356,37 +260,8 @@ static int executePipeline(char **command_argv, int pipe_count,
 // Command dispatch and execution
 static int executeCommand(char **command_argv, bool is_background,
                           pid_t shell_pgid, const char *command_text) {
-  if (strcmp(command_argv[0], "cd") == 0) {
-    return changeDirectory(command_argv);
-  }
-
-  if (strcmp(command_argv[0], "jobs") == 0) {
-    printJobs();
-    return EXIT_SUCCESS;
-  }
-
-  if (strcmp(command_argv[0], "fg") == 0) {
-    if (command_argv[1] == NULL) {
-      fprintf(stderr, "fg: missing job ID\n");
-      return EXIT_FAILURE;
-    }
-
-    int job_id = atoi(command_argv[1]);
-    Job *job = findJobById(job_id);
-
-    return fg(job, shell_pgid);
-  }
-
-  if (strcmp(command_argv[0], "bg") == 0) {
-    if (command_argv[1] == NULL) {
-      fprintf(stderr, "bg: missing job ID\n");
-      return EXIT_FAILURE;
-    }
-
-    int job_id = atoi(command_argv[1]);
-    Job *job = findJobById(job_id);
-
-    return bg(job);
+  if (isBuiltinCommand(command_argv[0])) {
+    return executeBuiltinCommand(command_argv, shell_pgid);
   }
 
   int pipe_count = countPipes(command_argv);
