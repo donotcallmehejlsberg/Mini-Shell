@@ -12,6 +12,7 @@ add_executable(minishell
   src/main.c
   src/job.c
   src/parser.c
+  src/pipeline.c
   src/process.c
   src/signal_handler.c
   src/shell.c

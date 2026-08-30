@@ -78,6 +78,7 @@ include/
   input.h           Input buffer and prompt interface
   job.h             Job types and job-table interface
   parser.h          Command parsing interface
+  pipeline.h        Pipeline execution interface
   process.h         Child-process waiting interface
   shell.h           Public shell interface
   signal_handler.h  Signal-handling interface
@@ -88,8 +89,9 @@ src/
   job.c             Job storage and state management
   main.c            Program entry point
   parser.c          Tokenization and operator detection
+  pipeline.c        Pipe creation and pipeline execution
   process.c         Child waiting and process-status conversion
-  shell.c           Shell loop, execution, pipelines, and terminal control
+  shell.c           Shell loop, command dispatch, and single-command execution
   signal_handler.c  Shell and child signal configuration
 ```
 
@@ -108,6 +110,8 @@ The project is divided by responsibility:
   interactive prompt.
 - `parser.c` converts the input buffer into an argument vector and detects
   background execution, redirection operators, and pipes.
+- `pipeline.c` creates pipes, forks pipeline processes, connects their file
+  descriptors, manages their process group, and waits for foreground pipelines.
 - `process.c` waits for a child and converts its wait status into a command
   status and job state.
 - `job.c` owns the private job table, generates Job IDs, and provides
@@ -133,7 +137,7 @@ runShell() in shell.c
   |
   +--> single external command -------------> fork / redirection / execvp
   |
-  +--> pipeline -----------------------------> pipes / process group / execvp
+  +--> pipeline.c ----------------------------> pipes / process group / execvp
   |
   +--> process.c ----------------------------> wait for child / report state
   |
@@ -142,9 +146,9 @@ runShell() in shell.c
   +--> signal_handler.c ---------------------> shell and child signal behavior
 ```
 
-`shell.c` currently remains the largest module because process creation,
-pipeline execution, redirection, and terminal control still live there. These
-responsibilities can be separated further as the project grows.
+`shell.c` still coordinates single-command process creation, redirection, and
+terminal control. These responsibilities can be separated further as the
+project grows.
 
 ## Current Limitations
 
