@@ -8,6 +8,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 add_executable(minishell
   src/buildin.c
+  src/executor.c
   src/input.c
   src/main.c
   src/job.c

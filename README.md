@@ -75,6 +75,7 @@ larger shells.
 ```text
 include/
   buildin.h         Built-in command dispatch interface
+  executor.h        Command execution interface
   input.h           Input buffer and prompt interface
   job.h             Job types and job-table interface
   parser.h          Command parsing interface
@@ -85,13 +86,14 @@ include/
 
 src/
   buildin.c         Built-in cd, jobs, fg, and bg commands
+  executor.c        Command dispatch, redirection, and external execution
   input.c           Input buffer, line reading, and prompt output
   job.c             Job storage and state management
   main.c            Program entry point
   parser.c          Tokenization and operator detection
   pipeline.c        Pipe creation and pipeline execution
   process.c         Child waiting and process-status conversion
-  shell.c           Shell loop, command dispatch, and single-command execution
+  shell.c           Interactive shell loop and high-level coordination
   signal_handler.c  Shell and child signal configuration
 ```
 
@@ -101,11 +103,12 @@ The project is divided by responsibility:
 
 - `main.c` allocates the input buffer, starts the shell, and releases the
   buffer when the shell exits.
-- `shell.c` owns the interactive loop and coordinates built-in commands,
-  external-command execution, redirection, pipelines, process groups, and
-  terminal control.
+- `shell.c` owns the interactive loop, parses each input line, and delegates
+  command execution.
 - `buildin.c` detects and executes the built-in `cd`, `jobs`, `fg`, and `bg`
   commands.
+- `executor.c` dispatches built-ins and pipelines, and executes single external
+  commands with redirection, process groups, and terminal control.
 - `input.c` allocates the input buffer, reads command lines, and prints the
   interactive prompt.
 - `parser.c` converts the input buffer into an argument vector and detects
@@ -133,22 +136,23 @@ runShell() in shell.c
   |      tokenize command
   |      detect &, redirection, and pipes
   |
-  +--> buildin.c ----------------------------> cd / jobs / fg / bg
-  |
-  +--> single external command -------------> fork / redirection / execvp
-  |
-  +--> pipeline.c ----------------------------> pipes / process group / execvp
-  |
-  +--> process.c ----------------------------> wait for child / report state
-  |
-  +--> job.c --------------------------------> store and update jobs
+  +--> executor.c
+  |      |
+  |      +--> buildin.c ---------------------> cd / jobs / fg / bg
+  |      |
+  |      +--> single external command -------> fork / redirection / execvp
+  |      |
+  |      +--> pipeline.c --------------------> pipes / process group / execvp
+  |      |
+  |      +--> process.c ---------------------> wait for child / report state
+  |      |
+  |      +--> job.c -------------------------> store and update jobs
   |
   +--> signal_handler.c ---------------------> shell and child signal behavior
 ```
 
-`shell.c` still coordinates single-command process creation, redirection, and
-terminal control. These responsibilities can be separated further as the
-project grows.
+`shell.c` now focuses on the interactive lifecycle. Execution details are
+owned by `executor.c` and `pipeline.c`.
 
 ## Current Limitations
 

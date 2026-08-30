@@ -11,6 +11,13 @@
 #include "process.h"
 
 // Built-in commands
+
+/******************************************************
+  kill(pid, SIGTERM);  // Request process termination
+  kill(pid, SIGSTOP);  // Stop the process
+  kill(pid, SIGCONT);  // Continue a stopped process
+*******************************************************/
+
 static int changeDirectory(char **command_argv) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "cd: missing directory\n");
