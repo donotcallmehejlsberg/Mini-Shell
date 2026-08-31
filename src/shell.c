@@ -13,7 +13,6 @@
 #include "process.h"
 #include "signal_handler.h"
 
-// Shell lifecycle
 void runShell(char *buffer) {
   char *command_argv[MAX_ARGUMENTS + 1];
 
@@ -36,11 +35,7 @@ void runShell(char *buffer) {
     snprintf(command_copy, sizeof(command_copy), "%s", buffer);
 
     int argument_count = tokenizeCommand(buffer, command_argv);
-    if (argument_count < 0) {
-      continue;
-    }
-
-    if (argument_count == 0) {
+    if (argument_count <= 0) {
       continue;
     }
 
