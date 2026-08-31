@@ -10,7 +10,7 @@ management.
 
 - Execute external programs with `fork()` and `execvp()`
 - Change directories with the built-in `cd` command
-- Exit the shell with `exit` or `quit`
+- Exit the shell with the built-in `exit` command
 - Redirect input with `<`
 - Redirect output with `>`
 - Append output with `>>`

@@ -26,11 +26,7 @@ bool readLine(char *buffer) {
       return true;
     }
   }
-
-  if (strcmp(buffer, "quit\n") == 0) {
-    return false;
-  }
-
+  
   return true;
 }
 
