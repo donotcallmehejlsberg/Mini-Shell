@@ -50,6 +50,8 @@ void runShell(char *buffer) {
       argument_count--;
     }
 
+    expandEnvironment(command_argv);
+
     if (strcmp(command_argv[0], "exit") == 0) {
       break;
     }

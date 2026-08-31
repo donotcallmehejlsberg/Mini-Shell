@@ -23,6 +23,7 @@ management.
 - List stored jobs with the built-in `jobs` command
 - Continue a stopped job in the background with `bg JOB_ID`
 - Continue a stopped job in the foreground with `fg JOB_ID`
+- Expand standalone environment-variable arguments such as `$HOME` and `$USER`
 - Wait for child processes and report command exit status
 - Reap completed background processes without blocking the shell
 
@@ -56,6 +57,7 @@ cmake --build build
 ls -la
 cd /tmp
 echo hello > output.txt
+echo hello $USER $HOME
 cat < output.txt
 cat file.txt | grep hello | sort
 sleep 5 &
@@ -158,7 +160,9 @@ owned by `executor.c` and `pipeline.c`.
 
 - Commands are parsed as whitespace-separated tokens.
 - Quoting and escaping are not supported.
-- Environment-variable expansion such as `echo $HOME` is not implemented.
+- Environment-variable expansion supports standalone arguments such as
+  `$HOME`; embedded and braced forms such as `user-$USER` and `${HOME}` are not
+  supported.
 - Job tracking and `fg`/`bg` currently support single-process jobs; complete
   pipeline job tracking is not implemented yet.
 - Completed background children are reaped when the shell loop runs again;
