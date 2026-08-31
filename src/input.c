@@ -31,6 +31,6 @@ bool readLine(char *buffer) {
 }
 
 void printPrompt(void) {
-  printf("my shell > ");
+  printf("minishell$ ");
   fflush(stdout);
 }
