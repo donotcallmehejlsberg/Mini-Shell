@@ -1,3 +1,7 @@
+/*
+ * Configures signal behavior for Mini-Shell and its child processes.
+ */
+
 #ifndef MINI_SHELL_SIGNAL_HANDLER_H_
 #define MINI_SHELL_SIGNAL_HANDLER_H_
 
