@@ -75,7 +75,7 @@ static pid_t createCommandProcess(char **command_argv, int redirection_index) {
   pid_t pid = fork();
   if (pid < 0) {
     perror("fork failed");
-    return EXIT_FAILURE;
+    return -1;
   }
 
   // For one command, the child is the leader of its own process group
@@ -97,10 +97,46 @@ static pid_t createCommandProcess(char **command_argv, int redirection_index) {
   // to avoid a race condition between the parent and child
   if (setpgid(pid, pid) == -1) {
     perror("setpgid");
-    return EXIT_FAILURE;
+    return -1;
   }
   printf("Child PID: %d, PGID: %d\n", (int)pid, (int)getpgid(pid));
   return pid;
+}
+
+static int addBackgroundJob(pid_t pid,
+                                const char *command_text) {
+  int job_id = addJob(pid, command_text, RUNNING);
+
+  if (job_id == -1) {
+    fprintf(stderr, "failed to register background job\n");
+    return EXIT_FAILURE;
+  }
+
+  printf("[%d] PID %d\n", job_id, (int)pid);
+  return EXIT_SUCCESS;
+}
+
+static int runForegroundProcess(pid_t pid, pid_t shell_pgid,
+                                const char *command_text) {
+  if (tcsetpgrp(STDIN_FILENO, pid) == -1) {
+    perror("tcsetpgrp");
+    return EXIT_FAILURE;
+  }
+
+  // Keyboard input, Ctrl+C, and Ctrl+Z now target the foreground job group
+  JobState job_state = RUNNING;
+  int command_status = waitForChild(pid, &job_state);
+  if (job_state == STOPPED) {
+    addJob(pid, command_text, STOPPED);
+  }
+
+  // Give keyboard input and terminal signals back to the Mini-Shell group
+  if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
+    perror("tcsetpgrp");
+    return EXIT_FAILURE;
+  }
+
+  return command_status;
 }
 
 int executeCommand(char **command_argv, bool is_background, pid_t shell_pgid,
@@ -120,33 +156,12 @@ int executeCommand(char **command_argv, bool is_background, pid_t shell_pgid,
   if (pid == -1) {
     return EXIT_FAILURE;
   }
+
   pid_t group_leader = pid;
-
   // A background job must not take terminal control or block the shell
-  if (is_background) {
-    int job_id = addJob(group_leader, command_text, RUNNING);
-    printf("[background] PID %d %d\n", (int)pid, job_id);
-    return EXIT_SUCCESS;
+  if(is_background)
+  {
+    return addBackgroundJob(group_leader, command_text);
   }
-
-  // Keyboard input, Ctrl+C, and Ctrl+Z now target the foreground job group
-  if (tcsetpgrp(STDIN_FILENO, group_leader) == -1) {
-    perror("tcsetpgrp");
-    return EXIT_FAILURE;
-  }
-
-  // Save the status because the shell must reclaim the terminal before return
-  JobState job_state;
-  int command_status = waitForChild(pid, &job_state);
-  if (job_state == STOPPED) {
-    addJob(group_leader, command_text, STOPPED);
-  }
-
-  // Give keyboard input and terminal signals back to the Mini-Shell group
-  if (tcsetpgrp(STDIN_FILENO, shell_pgid) == -1) {
-    perror("tcsetpgrp");
-    return EXIT_FAILURE;
-  }
-
-  return command_status;
+  return runForegroundProcess(group_leader, shell_pgid, command_text);
 }
