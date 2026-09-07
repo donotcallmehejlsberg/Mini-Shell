@@ -10,14 +10,6 @@
 #include "job.h"
 #include "process.h"
 
-// Built-in commands
-
-/******************************************************
-  kill(pid, SIGTERM);  // Request process termination
-  kill(pid, SIGSTOP);  // Stop the process
-  kill(pid, SIGCONT);  // Continue a stopped process
-*******************************************************/
-
 static int changeDirectory(char **command_argv) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "cd: missing directory\n");
@@ -92,6 +84,30 @@ bool isBuiltinCommand(const char *command) {
          strcmp(command, "fg") == 0 || strcmp(command, "bg") == 0;
 }
 
+static int executeForegroundCommand(char **command_argv, pid_t shell_pgid) {
+  if (command_argv[1] == NULL) {
+    fprintf(stderr, "fg: missing job ID\n");
+    return EXIT_FAILURE;
+  }
+
+  int job_id = atoi(command_argv[1]);
+  Job *job = findJobById(job_id);
+
+  return foregroundJob(job, shell_pgid);
+}
+
+static int executeBackgroundCommand(char **command_argv) {
+  if (command_argv[1] == NULL) {
+    fprintf(stderr, "bg: missing job ID\n");
+    return EXIT_FAILURE;
+  }
+
+  int job_id = atoi(command_argv[1]);
+  Job *job = findJobById(job_id);
+
+  return backgroundJob(job);
+}
+
 int executeBuiltinCommand(char **command_argv, pid_t shell_pgid) {
   if (command_argv[0] == NULL) {
     return EXIT_FAILURE;
@@ -111,27 +127,11 @@ int executeBuiltinCommand(char **command_argv, pid_t shell_pgid) {
   }
 
   if (strcmp(command_argv[0], "fg") == 0) {
-    if (command_argv[1] == NULL) {
-      fprintf(stderr, "fg: missing job ID\n");
-      return EXIT_FAILURE;
-    }
-
-    int job_id = atoi(command_argv[1]);
-    Job *job = findJobById(job_id);
-
-    return foregroundJob(job, shell_pgid);
+    return executeForegroundCommand(command_argv, shell_pgid);
   }
 
   if (strcmp(command_argv[0], "bg") == 0) {
-    if (command_argv[1] == NULL) {
-      fprintf(stderr, "bg: missing job ID\n");
-      return EXIT_FAILURE;
-    }
-
-    int job_id = atoi(command_argv[1]);
-    Job *job = findJobById(job_id);
-
-    return backgroundJob(job);
+    return executeBackgroundCommand(command_argv);
   }
 
   return EXIT_FAILURE;
