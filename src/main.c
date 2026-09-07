@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
-#include "shell.h"
 #include "input.h"
+#include "shell.h"
 
 int main(void) {
   char *buffer = allocateBuffer();

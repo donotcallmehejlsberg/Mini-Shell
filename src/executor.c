@@ -26,8 +26,8 @@ static int setupRedirection(char **command_argv, int redirection_index) {
   const char *redirection_operator = command_argv[redirection_index];
   const char *filename = command_argv[redirection_index + 1];
 
-  int fd;
-  int target_fd;
+  int fd = -1;
+  int target_fd = -1;
 
   if (strcmp(redirection_operator, ">") == 0) {
     fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -71,6 +71,38 @@ static void executeChild(char **command_argv, int redirection_index) {
   _exit(EXIT_FAILURE);
 }
 
+static pid_t createCommandProcess(char **command_argv, int redirection_index) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    perror("fork failed");
+    return EXIT_FAILURE;
+  }
+
+  // For one command, the child is the leader of its own process group
+  if (pid == 0) {
+    if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
+      _exit(EXIT_FAILURE);
+    }
+
+    // In the child, (0, 0) means: put this process in a new group
+    // whose PGID is equal to its own PID
+    if (setpgid(0, 0) == -1) {
+      perror("setpgid");
+      _exit(EXIT_FAILURE);
+    }
+    executeChild(command_argv, redirection_index);
+  }
+
+  // The parent repeats the same assignment using the child's real PID
+  // to avoid a race condition between the parent and child
+  if (setpgid(pid, pid) == -1) {
+    perror("setpgid");
+    return EXIT_FAILURE;
+  }
+  printf("Child PID: %d, PGID: %d\n", (int)pid, (int)getpgid(pid));
+  return pid;
+}
+
 int executeCommand(char **command_argv, bool is_background, pid_t shell_pgid,
                    const char *command_text) {
   if (isBuiltinCommand(command_argv[0])) {
@@ -84,33 +116,11 @@ int executeCommand(char **command_argv, bool is_background, pid_t shell_pgid,
 
   int redirection_index = findRedirectionIndex(command_argv);
 
-  pid_t pid = fork();
-  if (pid < 0) {
-    perror("fork failed");
+  pid_t pid = createCommandProcess(command_argv, redirection_index);
+  if (pid == -1) {
     return EXIT_FAILURE;
   }
-
-  // For one command, the child is the leader of its own process group
   pid_t group_leader = pid;
-  if (pid == 0) {
-    if (restoreChildSignalHandlers() != EXIT_SUCCESS) {
-      _exit(EXIT_FAILURE);
-    }
-
-    // In the child both zero arguments mean "use this process and its PID."
-    if (setpgid(pid, group_leader) == -1) {
-      perror("setpgid");
-      _exit(EXIT_FAILURE);
-    }
-    executeChild(command_argv, redirection_index);
-  }
-
-  // Parent repeats setpgid() so scheduling order cannot cause a race
-  if (setpgid(pid, group_leader) == -1) {
-    perror("setpgid");
-    return EXIT_FAILURE;
-  }
-  printf("Child PID: %d, PGID: %d\n", (int)pid, (int)getpgid(pid));
 
   // A background job must not take terminal control or block the shell
   if (is_background) {

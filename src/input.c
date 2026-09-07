@@ -7,7 +7,6 @@
 
 #include "signal_handler.h"
 
-// Input and parsing
 char *allocateBuffer(void) {
   char *buffer = calloc(BUFFER_SIZE, sizeof(char));
   if (buffer == NULL) {
@@ -26,7 +25,6 @@ bool readLine(char *buffer) {
       return true;
     }
   }
-  
   return true;
 }
 
