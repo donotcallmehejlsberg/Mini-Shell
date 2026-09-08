@@ -12,14 +12,25 @@
 
 #define PIPE_END_COUNT 2
 
-int executePipeline(char **command_argv, int pipe_count, bool is_background,
-                    pid_t shell_pgid) {
-  int pipefds[pipe_count][PIPE_END_COUNT];
+static int createPipes(int pipe_count, int pipefds[][PIPE_END_COUNT]) {
   for (int i = 0; i < pipe_count; i++) {
     if (pipe(pipefds[i]) == -1) {
       perror("pipe");
-      return EXIT_FAILURE;
+      for (int j = 0; j < i; j++) {
+        close(pipefds[j][0]);
+        close(pipefds[j][1]);
+      }
+      return -1;
     }
+  }
+  return 0;
+}
+
+int executePipeline(char **command_argv, int pipe_count, bool is_background,
+                    pid_t shell_pgid) {
+  int pipefds[pipe_count][PIPE_END_COUNT];
+  if (createPipes(pipe_count, pipefds) == -1) {
+    return EXIT_FAILURE;
   }
 
   char **commands[MAX_ARGUMENTS];
