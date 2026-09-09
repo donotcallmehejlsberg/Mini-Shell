@@ -12,6 +12,6 @@
 bool isBuiltinCommand(const char *command);
 
 // Executes the requested built-in command and returns its status.
-int executeBuiltinCommand(char **command_argv, pid_t shell_pgid);
+int handleBuiltinCommand(char **command_argv, pid_t shell_pgid);
 
 #endif

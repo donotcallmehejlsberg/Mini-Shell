@@ -142,7 +142,7 @@ static int runForegroundProcess(pid_t pid, pid_t shell_pgid,
 int executeCommand(char **command_argv, bool is_background, pid_t shell_pgid,
                    const char *command_text) {
   if (isBuiltinCommand(command_argv[0])) {
-    return executeBuiltinCommand(command_argv, shell_pgid);
+    return handleBuiltinCommand(command_argv, shell_pgid);
   }
 
   int pipe_count = countPipes(command_argv);

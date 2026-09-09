@@ -24,7 +24,7 @@ static int changeDirectory(char **command_argv) {
   return EXIT_SUCCESS;
 }
 
-static int backgroundJob(Job *job) {
+static int resumeJobInBackground(Job *job) {
   if (job == NULL) {
     fprintf(stderr, "bg: job not found\n");
     return EXIT_FAILURE;
@@ -39,7 +39,7 @@ static int backgroundJob(Job *job) {
   return EXIT_SUCCESS;
 }
 
-static int foregroundJob(Job *job, pid_t shell_pgid) {
+static int resumeJobInForeground(Job *job, pid_t shell_pgid) {
   if (job == NULL) {
     fprintf(stderr, "fg: job not found\n");
     return EXIT_FAILURE;
@@ -96,7 +96,7 @@ static int parseJobId(char **command_argv) {
   return job_id;
 }
 
-static int executeForegroundCommand(char **command_argv, pid_t shell_pgid) {
+static int handleFgCommand(char **command_argv, pid_t shell_pgid) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "fg: missing job ID\n");
     return EXIT_FAILURE;
@@ -108,10 +108,10 @@ static int executeForegroundCommand(char **command_argv, pid_t shell_pgid) {
   }
 
   Job *job = findJobById(job_id);
-  return foregroundJob(job, shell_pgid);
+  return resumeJobInForeground(job, shell_pgid);
 }
 
-static int executeBackgroundCommand(char **command_argv) {
+static int handleBgCommand(char **command_argv) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "bg: missing job ID\n");
     return EXIT_FAILURE;
@@ -123,10 +123,10 @@ static int executeBackgroundCommand(char **command_argv) {
   }
 
   Job *job = findJobById(job_id);
-  return backgroundJob(job);
+  return resumeJobInBackground(job);
 }
 
-int executeBuiltinCommand(char **command_argv, pid_t shell_pgid) {
+int handleBuiltinCommand(char **command_argv, pid_t shell_pgid) {
   if (command_argv[0] == NULL) {
     return EXIT_FAILURE;
   }
@@ -145,11 +145,11 @@ int executeBuiltinCommand(char **command_argv, pid_t shell_pgid) {
   }
 
   if (strcmp(command_argv[0], "fg") == 0) {
-    return executeForegroundCommand(command_argv, shell_pgid);
+    return handleFgCommand(command_argv, shell_pgid);
   }
 
   if (strcmp(command_argv[0], "bg") == 0) {
-    return executeBackgroundCommand(command_argv);
+    return handleBgCommand(command_argv);
   }
 
   return EXIT_FAILURE;
