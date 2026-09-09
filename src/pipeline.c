@@ -44,6 +44,25 @@ static int splitPipelineCommands(char **command_argv, char ***commands) {
   return command_count;
 }
 
+static int connectPipelineIO(int command_index, int command_count,
+                             int pipefds[][PIPE_END_COUNT]) {
+  if (command_index > 0) {
+    if (dup2(pipefds[command_index - 1][0], STDIN_FILENO) == -1) {
+      perror("dup2 stdin");
+      return -1;
+    }
+  }
+
+  if (command_index < command_count - 1) {
+    if (dup2(pipefds[command_index][1], STDOUT_FILENO) == -1) {
+      perror("dup2 stdout");
+      return -1;
+    }
+  }
+  
+  return 0;
+}
+
 static pid_t spawnPipelineProcesses(char **commands[], pid_t pids[],
                                     int pipefds[][PIPE_END_COUNT],
                                     int command_count) {
@@ -59,7 +78,6 @@ static pid_t spawnPipelineProcesses(char **commands[], pid_t pids[],
     }
 
     if (i == 0) {
-      // Parent sees the first child's real PID; the first child sees zero
       group_leader = pids[i];
     }
 
@@ -68,19 +86,13 @@ static pid_t spawnPipelineProcesses(char **commands[], pid_t pids[],
         _exit(EXIT_FAILURE);
       }
 
-      // Join this child to the pipeline group before replacing it with
-      // execvp()
       if (setpgid(pids[i], group_leader) == -1) {
         perror("setpgid");
         _exit(EXIT_FAILURE);
       }
 
-      if (i > 0) {
-        dup2(pipefds[i - 1][0], STDIN_FILENO);
-      }
-
-      if (i < command_count - 1) {
-        dup2(pipefds[i][1], STDOUT_FILENO);
+      if (connectPipelineIO(i, command_count, pipefds) == -1) {
+        _exit(EXIT_FAILURE);
       }
 
       closePipelinePipes(pipe_count, pipefds);
@@ -90,14 +102,12 @@ static pid_t spawnPipelineProcesses(char **commands[], pid_t pids[],
       _exit(EXIT_FAILURE);
     }
 
-    // Parent repeats setpgid() so scheduling order cannot cause a race
     if (setpgid(pids[i], group_leader) == -1) {
       perror("setpgid");
       return EXIT_FAILURE;
     }
     printf("Child PID: %d, PGID: %d\n", (int)pids[i], (int)getpgid(pids[i]));
   }
-
   closePipelinePipes(pipe_count, pipefds);
   return group_leader;
 }
