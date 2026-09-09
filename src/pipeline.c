@@ -12,14 +12,18 @@
 
 #define PIPE_END_COUNT 2
 
+static void closePipelinePipes(int pipe_count, int pipefds[][PIPE_END_COUNT]) {
+  for (int j = 0; j < pipe_count; j++) {
+    close(pipefds[j][0]);
+    close(pipefds[j][1]);
+  }
+}
+
 static int createPipes(int pipe_count, int pipefds[][PIPE_END_COUNT]) {
   for (int i = 0; i < pipe_count; i++) {
     if (pipe(pipefds[i]) == -1) {
       perror("pipe");
-      for (int j = 0; j < i; j++) {
-        close(pipefds[j][0]);
-        close(pipefds[j][1]);
-      }
+      closePipelinePipes(i, pipefds);
       return -1;
     }
   }
@@ -37,27 +41,21 @@ static int splitPipelineCommands(char **command_argv, char ***commands) {
       command_count++;
     }
   }
-
   return command_count;
 }
-int executePipeline(char **command_argv, int pipe_count, bool is_background,
-                    pid_t shell_pgid) {
-  int pipefds[pipe_count][PIPE_END_COUNT];
-  if (createPipes(pipe_count, pipefds) == -1) {
-    return EXIT_FAILURE;
-  }
 
-  char **commands[MAX_ARGUMENTS];
-  int command_count = splitPipelineCommands(command_argv, commands);
-
-  // The first child becomes the process-group leader for the whole pipeline
+static pid_t spawnPipelineProcesses(char **commands[], pid_t pids[],
+                                    int pipefds[][PIPE_END_COUNT],
+                                    int command_count) {
+  int pipe_count = command_count - 1;
   pid_t group_leader = 0;
-  pid_t pids[command_count];
+
   for (int i = 0; i < command_count; i++) {
     pids[i] = fork();
     if (pids[i] < 0) {
       perror("fork failed");
-      return EXIT_FAILURE;
+      closePipelinePipes(pipe_count, pipefds);
+      return -1;
     }
 
     if (i == 0) {
@@ -85,10 +83,7 @@ int executePipeline(char **command_argv, int pipe_count, bool is_background,
         dup2(pipefds[i][1], STDOUT_FILENO);
       }
 
-      for (int j = 0; j < pipe_count; j++) {
-        close(pipefds[j][0]);
-        close(pipefds[j][1]);
-      }
+      closePipelinePipes(pipe_count, pipefds);
 
       execvp(commands[i][0], commands[i]);
       perror("execvp failed");
@@ -103,9 +98,25 @@ int executePipeline(char **command_argv, int pipe_count, bool is_background,
     printf("Child PID: %d, PGID: %d\n", (int)pids[i], (int)getpgid(pids[i]));
   }
 
-  for (int i = 0; i < pipe_count; i++) {
-    close(pipefds[i][0]);
-    close(pipefds[i][1]);
+  closePipelinePipes(pipe_count, pipefds);
+  return group_leader;
+}
+
+int executePipeline(char **command_argv, int pipe_count, bool is_background,
+                    pid_t shell_pgid) {
+  int pipefds[pipe_count][PIPE_END_COUNT];
+  if (createPipes(pipe_count, pipefds) == -1) {
+    return EXIT_FAILURE;
+  }
+
+  char **commands[MAX_ARGUMENTS];
+  int command_count = splitPipelineCommands(command_argv, commands);
+
+  pid_t pids[command_count];
+  pid_t group_leader =
+      spawnPipelineProcesses(commands, pids, pipefds, command_count);
+  if (group_leader == -1) {
+    return EXIT_FAILURE;
   }
 
   // A background pipeline keeps running without terminal control or waiting
