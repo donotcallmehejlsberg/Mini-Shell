@@ -26,14 +26,7 @@ static int createPipes(int pipe_count, int pipefds[][PIPE_END_COUNT]) {
   return 0;
 }
 
-int executePipeline(char **command_argv, int pipe_count, bool is_background,
-                    pid_t shell_pgid) {
-  int pipefds[pipe_count][PIPE_END_COUNT];
-  if (createPipes(pipe_count, pipefds) == -1) {
-    return EXIT_FAILURE;
-  }
-
-  char **commands[MAX_ARGUMENTS];
+static int splitPipelineCommands(char **command_argv, char ***commands) {
   int command_count = 1;
   commands[0] = command_argv;
 
@@ -44,6 +37,18 @@ int executePipeline(char **command_argv, int pipe_count, bool is_background,
       command_count++;
     }
   }
+
+  return command_count;
+}
+int executePipeline(char **command_argv, int pipe_count, bool is_background,
+                    pid_t shell_pgid) {
+  int pipefds[pipe_count][PIPE_END_COUNT];
+  if (createPipes(pipe_count, pipefds) == -1) {
+    return EXIT_FAILURE;
+  }
+
+  char **commands[MAX_ARGUMENTS];
+  int command_count = splitPipelineCommands(command_argv, commands);
 
   // The first child becomes the process-group leader for the whole pipeline
   pid_t group_leader = 0;
