@@ -84,17 +84,26 @@ bool isBuiltinCommand(const char *command) {
          strcmp(command, "fg") == 0 || strcmp(command, "bg") == 0;
 }
 
+static int parseJobId(char **command_argv) {
+  int job_id = 0;
+  char extra_character;
+  if (sscanf(command_argv[1], "%d%c", &job_id, &extra_character) != 1 ||
+      job_id <= 0) {
+    fprintf(stderr, "fg: invalid job ID '%s'\n", command_argv[1]);
+    return -1;
+  }
+
+  return job_id;
+}
+
 static int executeForegroundCommand(char **command_argv, pid_t shell_pgid) {
   if (command_argv[1] == NULL) {
     fprintf(stderr, "fg: missing job ID\n");
     return EXIT_FAILURE;
   }
 
-  int job_id = 0;
-  char extra_character;
-  if (sscanf(command_argv[1], "%d%c", &job_id, &extra_character) != 1 ||
-      job_id <= 0) {
-    fprintf(stderr, "fg: invalid job ID '%s'\n", command_argv[1]);
+  int job_id = parseJobId(command_argv);
+  if (job_id == -1) {
     return EXIT_FAILURE;
   }
 
@@ -108,11 +117,8 @@ static int executeBackgroundCommand(char **command_argv) {
     return EXIT_FAILURE;
   }
 
-  int job_id = 0;
-  char extra_character;
-  if (sscanf(command_argv[1], "%d%c", &job_id, &extra_character) != 1 ||
-      job_id <= 0) {
-    fprintf(stderr, "bg: invalid job ID '%s'\n", command_argv[1]);
+  int job_id = parseJobId(command_argv);
+  if (job_id == -1) {
     return EXIT_FAILURE;
   }
 
