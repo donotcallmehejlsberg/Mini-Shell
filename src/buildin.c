@@ -90,9 +90,15 @@ static int executeForegroundCommand(char **command_argv, pid_t shell_pgid) {
     return EXIT_FAILURE;
   }
 
-  int job_id = atoi(command_argv[1]);
-  Job *job = findJobById(job_id);
+  int job_id = 0;
+  char extra_character;
+  if (sscanf(command_argv[1], "%d%c", &job_id, &extra_character) != 1 ||
+      job_id <= 0) {
+    fprintf(stderr, "fg: invalid job ID '%s'\n", command_argv[1]);
+    return EXIT_FAILURE;
+  }
 
+  Job *job = findJobById(job_id);
   return foregroundJob(job, shell_pgid);
 }
 
@@ -102,9 +108,15 @@ static int executeBackgroundCommand(char **command_argv) {
     return EXIT_FAILURE;
   }
 
-  int job_id = atoi(command_argv[1]);
-  Job *job = findJobById(job_id);
+  int job_id = 0;
+  char extra_character;
+  if (sscanf(command_argv[1], "%d%c", &job_id, &extra_character) != 1 ||
+      job_id <= 0) {
+    fprintf(stderr, "bg: invalid job ID '%s'\n", command_argv[1]);
+    return EXIT_FAILURE;
+  }
 
+  Job *job = findJobById(job_id);
   return backgroundJob(job);
 }
 
